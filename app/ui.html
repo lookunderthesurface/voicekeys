@@ -394,6 +394,17 @@ function gateOf(s, word) {
   return hit && Number.isFinite(Number(hit.pauseMs)) ? Number(hit.pauseMs) : 1000;
 }
 
+// 每个词的 M1/M2 阈值：后端用 null 表示"用默认"，这里直接显示实际生效值
+function thOf(s, word, which) {
+  const list = (s && s.words) || [];
+  const hit = list.find((x) => x.word === word);
+  const t = hit && hit.thresholds ? hit.thresholds[which] : null;
+  if (t != null) return t;
+  const p = (s && s.pipeline && s.pipeline.policy) || {};
+  if (which === 'm1') return p.fastPathThreshold != null ? p.fastPathThreshold : 0.95;
+  return 0.7;
+}
+
 function renderPlans(s) {
   const groups = groupPlans(s.plans);
   $('planCount').textContent = groups.length ? `${groups.length} 行 · ${(s.plans || []).length} 个词` : '';
@@ -1078,11 +1089,10 @@ setInterval(checkModels, 5000);
 // ---------------------------------------------------------------- 主循环
 function render(s) {
   ui.lastState = s;
-  renderHeader(s);
-  renderPlans(s);
-  renderCapture(s);
-  renderEvents(s);
-  renderNewPlan();
+  // 每个面板独立容错：一个面板抛错不该让其它面板（尤其词表）变空白
+  for (const fn of [renderHeader, renderPlans, renderCapture, renderEvents, renderNewPlan]) {
+    try { fn(s); } catch (e) { console.error('[' + fn.name + ']', e); }
+  }
 }
 
 async function refresh() {
