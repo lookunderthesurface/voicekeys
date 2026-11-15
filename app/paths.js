@@ -35,4 +35,14 @@ function packageDir(name) {
   return resolveRoot((root) => fs.existsSync(path.join(root, 'node_modules', name)));
 }
 
-module.exports = { APP_ROOT, candidates, pluginRoot, packageDir };
+
+/** 按名字加载随包依赖：lib/node_modules 不在 Node 的默认搜索路径上，必须显式指过去 */
+function requirePackage(name) {
+  for (const root of candidates()) {
+    const dir = path.join(root, 'node_modules', name);
+    if (fs.existsSync(dir)) return require(dir);
+  }
+  throw new Error('缺少依赖 ' + name + '：先在仓库根目录运行 npm install --prefix lib');
+}
+
+module.exports = { APP_ROOT, candidates, pluginRoot, packageDir, requirePackage };

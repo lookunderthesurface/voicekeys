@@ -9,7 +9,7 @@
 // 关键点：**整句比对，不做"包含"**。
 //   以前是 t.includes(w)，导致"我吃饭的时候说完了话"也会触发；
 //   现在要求整句话本身就像这个命令（带长度上限），误触发大幅下降。
-const { pinyin } = require('pinyin-pro');
+const { pinyin } = require('./paths.js').requirePackage('pinyin-pro');
 
 const PUNCT = /[\s,，。.!！?？、;；:："'“”‘’()（）\[\]【】…—\-~]/g;
 

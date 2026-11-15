@@ -2,7 +2,7 @@
 //
 // 字符层面「暂/淡」完全不同（0 分），但声韵母层面 z/an vs d/an 只差一个声母。
 // 这正是"听错一个字"和"听成另一个词"的分界。
-const { pinyin } = require('pinyin-pro');
+const { pinyin } = require('./paths.js').requirePackage('pinyin-pro');
 
 const GAP = -0.35;
 
