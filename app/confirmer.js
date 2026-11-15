@@ -80,6 +80,11 @@ class Confirmer {
    * @param {number} timeoutMs 超时就当没确认（用流式结果继续）
    */
   confirm(samples, timeoutMs = 400) {
+    // 静音片段直接返回：喂给 ONNX 会抛 "Non-zero status code returned while running Reshape"，
+    // 只是刷日志、没有意义。阈值 0.005 ≈ 人耳听不见。
+    let peak = 0;
+    for (let i = 0; i < samples.length; i += 16) { const v = Math.abs(samples[i]); if (v > peak) peak = v; }
+    if (peak < 0.005) return Promise.resolve({ text: '', ms: 0, silent: true });
     this.start();
     this.lastUsedAt = Date.now();
     this.stats.requests += 1;

@@ -821,6 +821,12 @@ function snapshot() {
     confirmer: confirmer.state(),
     pipeline: pipeline.state(),
     calibrating: Boolean(state.calibrating),
+    models: (() => {
+      const dir = path.join(config.DIRS.models, 'asr');
+      const m1 = fs.existsSync(path.join(dir, 'sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23', 'encoder-epoch-99-avg-1.int8.onnx'));
+      const m2 = fs.existsSync(path.join(dir, 'sherpa-onnx-paraformer-zh-small-2024-03-09', 'model.int8.onnx'));
+      return { ok: m1 && m2, m1, m2, dir, downloading: Boolean(state.downloadingModels) };
+    })(),
     calibrateProgress: state.calibrateProgress || null,
     asrText: state.asrText || '',
   };
@@ -1015,6 +1021,50 @@ const server = http.createServer(async (req, res) => {
       setTimeout(() => process.exit(0), 800);
     }, 200);
     return;
+  }
+
+  // ---------------- 模型：首次运行检测 + 下载 / 指定本地 ----------------
+  if (p === '/api/models/status') {
+    const dir = path.join(config.DIRS.models, 'asr');
+    const m1 = path.join(dir, 'sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23', 'encoder-epoch-99-avg-1.int8.onnx');
+    const m2 = path.join(dir, 'sherpa-onnx-paraformer-zh-small-2024-03-09', 'model.int8.onnx');
+    return json(res, 200, {
+      dir,
+      m1: fs.existsSync(m1),
+      m2: fs.existsSync(m2),
+      missing: !fs.existsSync(m1) || !fs.existsSync(m2),
+      downloading: Boolean(state.downloadingModels),
+    });
+  }
+
+  if (p === '/api/models/download' && req.method === 'POST') {
+    if (state.downloadingModels) return json(res, 200, { ok: true, already: true });
+    state.downloadingModels = true;
+    log('开始下载语音模型（约 155MB）…');
+    const { spawn } = require('node:child_process');
+    const child = spawn(process.execPath, [path.join(__dirname, '..', 'scripts', 'fetch-models.cjs')], {
+      windowsHide: true, stdio: 'ignore', cwd: path.join(__dirname, '..'),
+    });
+    child.on('exit', (code) => {
+      state.downloadingModels = false;
+      log('模型下载结束（exit ' + code + '），重启后生效');
+    });
+    return json(res, 200, { ok: true, started: true });
+  }
+
+  if (p === '/api/models/use-local' && req.method === 'POST') {
+    const body = JSON.parse((await readBody(req)) || '{}');
+    const dir = String(body.dir || '').trim();
+    if (!dir || !fs.existsSync(dir)) return json(res, 400, { error: '目录不存在: ' + dir });
+    // 允许用户给"包含两个模型文件夹的目录"，也允许直接给其中的某个
+    const hasM1 = fs.existsSync(path.join(dir, 'sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23', 'encoder-epoch-99-avg-1.int8.onnx'))
+      || fs.existsSync(path.join(dir, 'encoder-epoch-99-avg-1.int8.onnx'));
+    const hasM2 = fs.existsSync(path.join(dir, 'sherpa-onnx-paraformer-zh-small-2024-03-09', 'model.int8.onnx'))
+      || fs.existsSync(path.join(dir, 'model.int8.onnx'));
+    if (!hasM1 && !hasM2) return json(res, 400, { error: '这个目录里没找到模型文件（需要 M1 的 encoder-*.int8.onnx 或 M2 的 model.int8.onnx）' });
+    providers.save({ modelsDir: dir });
+    log('模型目录已指向: ' + dir);
+    return json(res, 200, { ok: true, dir, needRestart: true });
   }
 
   if (p === '/api/selfcheck') {

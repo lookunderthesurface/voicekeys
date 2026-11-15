@@ -30,7 +30,7 @@ const DIRS = {
   algorithms: path.join(ROOT, 'algorithms'),
   backups: path.join(ROOT, 'algorithms', '.backup'),
   capture: path.join(ROOT, 'capture'),
-  models: path.join(ROOT, 'models'),
+  models: process.env.VOICEKEYS_MODELS || customModelsDir() || path.join(ROOT, 'models'),
   logs: path.join(ROOT, 'logs'),
 };
 
@@ -41,6 +41,19 @@ const FILES = {
   log: path.join(ROOT, 'logs', 'app.log'),
   err: path.join(ROOT, 'logs', 'app.err'),
 };
+
+/**
+ * 用户在界面里指定的模型目录（settings.json 的 modelsDir）。
+ * 这里直接读文件、不 require providers：providers 反过来 require config，会形成循环依赖。
+ */
+function customModelsDir() {
+  try {
+    const f = path.join(ROOT, 'settings.json');
+    if (!fs.existsSync(f)) return null;
+    const cfg = JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, ''));
+    return cfg && typeof cfg.modelsDir === 'string' && cfg.modelsDir ? cfg.modelsDir : null;
+  } catch { return null; }
+}
 
 const CONFIG_TEMPLATE = {
   app: 'VoiceKeys',
