@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>VoiceKeys</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #14161a; color: #e8eaed; font: 14px/1.6 "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 20px 18px 56px; }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  h1 { font-size: 19px; margin: 0; font-weight: 650; }
+  .sub { color: #8b93a1; font-size: 12.5px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #3a4048; margin-right: 6px; }
+  .dot.on { background: #3fb950; box-shadow: 0 0 10px #3fb950; }
+  .dot.rec { background: #e5484d; box-shadow: 0 0 10px #e5484d; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 14px; }
+  .card { background: #1c1f25; border: 1px solid #2a2f38; border-radius: 14px; padding: 16px; }
+  .card h2 { font-size: 12.5px; margin: 0 0 10px; color: #9aa3b2; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; }
+  button { padding: 9px 13px; border-radius: 10px; border: 1px solid #333a45; background: #262b33; color: #e8eaed; font: inherit; font-weight: 600; cursor: pointer; }
+  button:hover:not(:disabled) { background: #2f3641; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: #2d5bd7; border-color: #3f6ee6; }
+  button.primary:hover:not(:disabled) { background: #3565e8; }
+  button.small { padding: 3px 7px; font-size: 11.5px; border-radius: 6px; }
+  button.danger { color: #e5908f; border-color: #4a3234; background: #2a2224; }
+  input[type=text], input[type=number] { padding: 8px 10px; border-radius: 9px; border: 1px solid #333a45; background: #14171c; color: #e8eaed; font: inherit; }
+  input[type=number] { width: 62px; padding: 2px 4px; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; border-radius: 6px; }
+  .row { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+  .row > input[type=text] { flex: 1; min-width: 170px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 5px; border-bottom: 1px solid #242932; vertical-align: top; }
+  th { color: #7f8794; font-weight: 500; font-size: 11.5px; }
+  code { font-family: Consolas, monospace; font-size: 11.5px; color: #9ecbff; }
+  .chip { display: inline-flex; align-items: center; gap: 3px; background: #232830; border: 1px solid #2f3541; border-radius: 8px; padding: 2px 3px 2px 8px; margin: 2px 4px 2px 0; }
+  .chip b { font-weight: 500; font-size: 13px; cursor: pointer; }
+  .chip.sel { border-color: #3f6ee6; background: #1d2740; }
+  .chip.sel b { color: #bcd0ff; }
+  .chip button { border: none; background: transparent; color: #7f8794; padding: 0 3px; font-size: 13px; line-height: 1; }
+  .chip button:hover { color: #e58a8f; background: transparent; }
+  .stat { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stat div span.k { display: block; color: #7f8794; font-size: 11.5px; }
+  .stat div span.v { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .log { font-size: 12.5px; color: #9aa3b2; max-height: 160px; overflow: auto; margin-top: 8px; }
+  .log div { padding: 2px 0; border-bottom: 1px dashed #232830; }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 11px; background: #232830; color: #9aa3b2; }
+  .tag.ok { background: #16301f; color: #6fcf8b; }
+  .tag.bad { background: #2f1a1c; color: #e58a8a; }
+  .tag.acc { background: #1d2740; color: #bcd0ff; }
+  .muted { color: #7f8794; font-size: 12.5px; }
+  .hint { color: #6f7887; font-size: 12px; margin-top: 6px; }
+  .recTarget { background: #22262e; border: 1px solid #333a45; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: 13.5px; }
+  .recTarget b { color: #bcd0ff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>VoiceKeys</h1>
+    <span class="sub">
+      <span id="dot" class="dot"></span><span id="status">连接中…</span>
+      · 源 <code id="source">-</code>
+      · <span id="handyState">Handy: —</span>
+      · <span id="micDiag">-</span>
+    </span>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="card" style="margin-bottom:14px">
+        <h2>命令词 · 计划 · 阈值（一行一个计划）</h2>
+        <div class="row" style="margin-bottom:8px">
+          <input type="text" id="utterance" placeholder="用一句中文描述动作，例如：把音量调到四十">
+          <button class="primary" id="btnPlan">生成计划</button>
+        </div>
+        <div id="planPreview" class="muted" style="margin-bottom:8px;min-height:18px">计划显示在这里，确认后填关键词再绑定。</div>
+        <div class="row" style="margin-bottom:10px">
+          <input type="text" id="phrase" placeholder="绑定到哪个词（多个用 / 分隔，如：暂停视频 / 暂停播放）">
+          <button id="btnBind" disabled>绑定</button>
+        </div>
+        <div class="hint" style="margin-bottom:8px">点词名＝选为校准目标；词后面的数字可直接改阈值（改完按回车或点到别处即保存）；× 解绑。</div>
+        <table id="plans"><thead><tr><th style="width:44%">关键词 / 阈值</th><th>计划</th></tr></thead><tbody></tbody></table>
+      </div>
+
+      <div class="card">
+        <h2>状态与最近事件</h2>
+        <div class="stat">
+          <div><span class="k">已绑定词</span><span class="v" id="wordCount">0</span></div>
+          <div><span class="k">最近执行</span><span class="v" id="lastExec" style="font-size:13px">—</span></div>
+          <div><span class="k">运行时长</span><span class="v" id="uptime" style="font-size:13px">—</span></div>
+        </div>
+        <div class="log" id="events"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" style="margin-bottom:14px">
+        <h2>校准</h2>
+        <div class="recTarget">当前校准目标：<b id="recWord">—</b>　<span class="muted" id="recTakes">0 / 5</span></div>
+        <div class="row" style="margin-bottom:8px">
+          <button class="primary" id="btnNext">录制下一条</button>
+          <button id="btnFinish">录制完毕</button>
+          <button class="danger small" id="btnClear">清空该词</button>
+        </div>
+        <div class="hint">先点左边某个词 → 「录制下一条」开始 → 说完再点一次（结束这段并开下一段）→ 全说完点「录制完毕」。每录一段自动重算阈值，并直接写回左边那个数字。</div>
+        <div class="stat" style="margin-top:10px">
+          <div><span class="k">本次录音</span><span class="v" id="takeMs" style="font-size:14px">0 ms</span></div>
+          <div><span class="k">最近一段下限</span><span class="v" id="lastFloor" style="font-size:14px">—</span></div>
+        </div>
+        <div class="muted" id="calibNote" style="margin-top:8px;min-height:32px"></div>
+      </div>
+
+      <div class="card">
+        <h2>Handy（语音听写）</h2>
+        <div class="muted" style="margin-bottom:8px">
+          说 <b>「听我说」</b> 开始录音（Handy 转写并粘贴），说 <b>「我说完了」</b> 停止。
+        </div>
+        <div class="row">
+          <button id="btnHandyStart">开始 Handy 录音</button>
+          <button id="btnHandyStop">停止</button>
+        </div>
+        <div class="muted" id="handyNote" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let pendingPlan = null;
+let selectedWord = '';
+let draft = {};              // { word: 正在输入但未保存的阈值 }
+let plansKey = '';           // 计划分组没变就不重建表格
+
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+const fmtUptime = (ms) => {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return m ? `${m}分${s % 60}秒` : `${s}秒`;
+};
+
+function thresholdOf(s, word) {
+  const w = (s.words || []).find((x) => x.word === word);
+  return w ? w.threshold : '';
+}
+
+function renderPlans(s) {
+  const groups = new Map();
+  for (const p of s.plans || []) {
+    const key = JSON.stringify(p.plan && p.plan.steps);
+    if (!groups.has(key)) groups.set(key, { plan: (p.plan && p.plan.steps) || [], words: [] });
+    groups.get(key).words.push(p.say);
+  }
+  const key = [...groups.keys()].join('||') + '#' + selectedWord;
+  if (key === plansKey) {
+    // 结构没变：只刷新没在编辑的阈值输入框
+    for (const p of s.plans || []) {
+      const input = document.querySelector(`input[data-word="${CSS.escape(p.say)}"]`);
+      if (!input) continue;
+      if (document.activeElement !== input && draft[p.say] === undefined) {
+        input.value = thresholdOf(s, p.say);
+      }
+    }
+    return;
+  }
+  plansKey = key;
+  const rows = [...groups.values()].map((g) => {
+    const chips = g.words.map((w) => {
+      const sel = w === selectedWord ? ' sel' : '';
+      const val = draft[w] !== undefined ? draft[w] : thresholdOf(s, w);
+      return `<span class="chip${sel}" data-pick="${esc(w)}">
+        <b>${esc(w)}</b>
+        <input type="number" step="0.01" min="0.05" max="0.5" data-word="${esc(w)}" value="${val}" title="阈值">
+        <button data-unbind="${esc(w)}" title="解绑">×</button>
+      </span>`;
+    }).join('');
+    return `<tr><td>${chips}</td><td><code>${esc(JSON.stringify(g.plan))}</code></td></tr>`;
+  }).join('');
+  $('plans').querySelector('tbody').innerHTML = rows || '<tr><td colspan="2" class="muted">还没有绑定任何词</td></tr>';
+}
+
+function render(s) {
+  $('dot').className = 'dot ' + (s.mode === 'recording' ? 'rec' : 'on');
+  $('status').textContent = s.mode === 'recording' ? '录音中' : '监听中';
+  $('source').textContent = s.source;
+  $('micDiag').textContent = `帧 ${s.frames} · 瞬时 ${s.lastRms} · 峰值 ${s.peak2s}`;
+  $('micDiag').style.color = s.feedError ? '#e58a8a' : (s.peak2s > 0.02 ? '#6fcf8b' : '#8b93a1');
+  $('handyState').textContent = 'Handy: ' + (s.handyRecording === true ? '录音中' : s.handyRecording === false ? '空闲' : '未知');
+  $('handyState').style.color = s.handyRecording === true ? '#bcd0ff' : '#8b93a1';
+
+  $('wordCount').textContent = (s.words || []).length;
+  $('uptime').textContent = fmtUptime(s.uptimeMs);
+  $('lastExec').textContent = s.lastResult ? (s.lastResult.ok ? '成功' : '失败') : '—';
+  $('lastExec').style.color = s.lastResult ? (s.lastResult.ok ? '#6fcf8b' : '#e58a8a') : '';
+
+  $('btnNext').textContent = s.mode === 'recording' ? '结束并录下一条' : '录制下一条';
+  $('btnFinish').disabled = s.mode !== 'recording' && s.takes === 0;
+  $('takeMs').textContent = (s.takeMs ?? 0) + ' ms';
+  $('recWord').textContent = selectedWord || '（未选择）';
+  $('recTakes').textContent = `${s.takes} / ${s.max}`;
+  if (s.lastNote) $('calibNote').textContent = s.lastNote;
+  $('lastFloor').textContent = (s.lastResult && s.lastResult.floor != null) ? s.lastResult.floor : '—';
+
+  renderPlans(s);
+
+  $('events').innerHTML = (s.events || []).map((e) => {
+    const t = new Date(e.at).toLocaleTimeString();
+    if (e.type === 'fire') return `<div>${t} <span class="tag ok">触发</span> ${esc(e.word)}</div>`;
+    if (e.type === 'heard') return `<div>${t} <span class="tag">听到</span> ${esc(e.word)}（等 ${e.waitMs}ms）</div>`;
+    if (e.type === 'drop') return `<div>${t} <span class="tag bad">丢弃</span> ${esc(e.word)}：${esc(e.reason)}</div>`;
+    if (e.type === 'ignored') return `<div>${t} <span class="tag">忽略</span> ${esc(e.word)}：${esc(e.reason)}</div>`;
+    if (e.type === 'handy') return `<div>${t} <span class="tag acc">Handy</span> ${esc(e.reason)}</div>`;
+    if (e.type === 'result') return `<div>${t} <span class="tag ${e.ok ? 'ok' : 'bad'}">${e.ok ? '完成' : '失败'}</span> ${esc(e.detail || '')}</div>`;
+    if (e.type === 'error') return `<div>${t} <span class="tag bad">错误</span> ${esc(e.message || '')}</div>`;
+    return '';
+  }).join('') || '<div class="muted">暂无事件</div>';
+}
+
+async function refresh() {
+  try { render(await api('/api/state')); } catch { $('status').textContent = '服务未连接'; }
+}
+
+async function pickWord(word) {
+  selectedWord = word;
+  render(await api('/api/select', { method: 'POST', body: JSON.stringify({ word }) }));
+}
+
+document.addEventListener('click', async (e) => {
+  const unbind = e.target.closest('[data-unbind]');
+  if (unbind) {
+    e.stopPropagation();
+    await api('/api/unbind', { method: 'POST', body: JSON.stringify({ phrase: unbind.dataset.unbind }) });
+    refresh();
+    return;
+  }
+  if (e.target.closest('input')) return;   // 点输入框不选词
+  const pick = e.target.closest('[data-pick]');
+  if (pick) await pickWord(pick.dataset.pick);
+});
+
+document.addEventListener('input', (e) => {
+  const input = e.target.closest('input[data-word]');
+  if (input) draft[input.dataset.word] = input.value;
+});
+
+document.addEventListener('change', async (e) => {
+  const input = e.target.closest('input[data-word]');
+  if (!input) return;
+  const word = input.dataset.word;
+  const value = Number(input.value);
+  delete draft[word];
+  if (!Number.isFinite(value)) return;
+  const out = await api('/api/threshold', { method: 'POST', body: JSON.stringify({ word, value }) });
+  if (out.ok) $('calibNote').textContent = `「${word}」阈值已保存为 ${out.threshold}`;
+  plansKey = '';
+  render(out);
+});
+
+$('btnPlan').onclick = async () => {
+  const text = $('utterance').value.trim();
+  if (!text) return;
+  $('planPreview').textContent = '生成中…';
+  try {
+    const gen = await api('/api/plan', { method: 'POST', body: JSON.stringify({ text }) });
+    if (!gen.ok) { $('planPreview').textContent = '失败：' + (gen.errors || []).join(';'); return; }
+    pendingPlan = gen.plan;
+    $('planPreview').innerHTML = '计划：<code>' + esc(JSON.stringify(gen.plan.steps)) + '</code>';
+    $('btnBind').disabled = false;
+    if (!$('phrase').value) $('phrase').value = text;
+  } catch (err) { $('planPreview').textContent = '失败：' + err.message; }
+};
+
+$('btnBind').onclick = async () => {
+  const raw = $('phrase').value.trim();
+  if (!raw || !pendingPlan) return;
+  const words = raw.split('/').map((w) => w.trim()).filter(Boolean);
+  let ok = 0;
+  for (const w of words) {
+    const out = await api('/api/bind', { method: 'POST', body: JSON.stringify({ phrase: w, plan: pendingPlan }) });
+    if (out.ok) ok += 1;
+  }
+  $('planPreview').textContent = `已绑定 ${ok}/${words.length} 个词`;
+  $('btnBind').disabled = true;
+  pendingPlan = null;
+  plansKey = '';
+  refresh();
+};
+
+$('btnNext').onclick = async () => {
+  if (!selectedWord) { $('calibNote').textContent = '先点左边一个词作为校准目标'; return; }
+  render(await api('/api/rec/next?word=' + encodeURIComponent(selectedWord), { method: 'POST' }));
+};
+$('btnFinish').onclick = async () => { render(await api('/api/rec/finish', { method: 'POST' })); };
+$('btnClear').onclick = async () => {
+  if (!selectedWord) return;
+  if (!confirm(`清空「${selectedWord}」的录音与阈值？`)) return;
+  plansKey = '';
+  render(await api('/api/clear?word=' + encodeURIComponent(selectedWord), { method: 'POST' }));
+};
+$('btnHandyStart').onclick = async () => { $('handyNote').textContent = '已发送开始…'; await api('/api/handy/start', { method: 'POST' }); refresh(); };
+$('btnHandyStop').onclick = async () => { $('handyNote').textContent = '已发送停止…'; await api('/api/handy/stop', { method: 'POST' }); refresh(); };
+
+window.addEventListener('beforeunload', () => {
+  if ($('status').textContent === '录音中') navigator.sendBeacon('/api/quit-mic');
+});
+
+setInterval(refresh, 1000);
+refresh();
+</script>
+</body>
+</html>

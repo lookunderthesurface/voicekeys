@@ -1,0 +1,1062 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoiceKeys</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#131519; --panel:#1a1d23; --panel2:#20242c; --line:#2b313b;
+    --text:#e9ecf1; --dim:#8b93a1; --dim2:#6c7481;
+    --accent:#3f6ee6; --accent2:#5b86ff; --ok:#3fb950; --warn:#e0a44a; --bad:#e5636a;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.65 "Microsoft YaHei UI","Segoe UI",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  code{font-family:Consolas,"Cascadia Mono",monospace; font-size:12px}
+
+  /* ---------- 顶部 ---------- */
+  header{
+    display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+    padding:14px 22px; border-bottom:1px solid var(--line); background:#161920;
+    position:sticky; top:0; z-index:10;
+  }
+  h1{font-size:16px; margin:0; font-weight:650; letter-spacing:.4px}
+  .pill{
+    display:inline-flex; align-items:center; gap:7px;
+    background:var(--panel2); border:1px solid var(--line); border-radius:999px;
+    padding:3px 11px; font-size:12.5px; color:var(--dim);
+  }
+  .pill b{color:var(--text); font-weight:600}
+  .led{width:8px;height:8px;border-radius:50%;background:#414852}
+  .led.on{background:var(--ok); box-shadow:0 0 8px rgba(63,185,80,.7)}
+  .led.rec{background:var(--bad); box-shadow:0 0 8px rgba(229,99,106,.8); animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:.25}}
+
+  /* ---------- 布局 ---------- */
+  main{max-width:1280px; margin:0 auto; padding:18px 22px 40px; display:grid; grid-template-columns:1fr 372px; gap:16px}
+  @media (max-width:1080px){ main{grid-template-columns:1fr} }
+  .col{display:flex; flex-direction:column; gap:16px; min-width:0}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px 16px 18px}
+  .panel > h2{
+    margin:0 0 12px; font-size:12px; letter-spacing:.8px; text-transform:uppercase;
+    color:var(--dim); font-weight:600; display:flex; align-items:center; gap:8px;
+  }
+  .panel > h2 .count{color:var(--dim2); font-weight:400; letter-spacing:0}
+
+  /* ---------- 控件 ---------- */
+  button{
+    font:inherit; font-weight:600; color:var(--text); cursor:pointer;
+    background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:8px 13px;
+    transition:background .12s,border-color .12s,transform .06s;
+  }
+  button:hover:not(:disabled){background:#272c35}
+  button:active:not(:disabled){transform:translateY(1px)}
+  button:disabled{opacity:.4; cursor:not-allowed}
+  button.primary{background:var(--accent); border-color:var(--accent)}
+  button.primary:hover:not(:disabled){background:var(--accent2)}
+  button.ghost{background:transparent}
+  button.tiny{padding:2px 8px; font-size:12px; border-radius:8px}
+  button.danger{color:#f0a3a7; border-color:#4a3236; background:#2a2225}
+
+  input[type=text],input[type=number]{
+    font:inherit; color:var(--text); background:#11141a; border:1px solid var(--line);
+    border-radius:9px; padding:8px 10px; outline:none;
+  }
+  input[type=text]:focus,input[type=number]:focus{border-color:var(--accent)}
+  input[type=number]{width:64px; padding:2px 6px; font-size:12.5px; text-align:right}
+  .row{display:flex; gap:9px; align-items:center; flex-wrap:wrap}
+  .row > input[type=text]{flex:1; min-width:170px}
+  .hint{color:var(--dim2); font-size:12px; line-height:1.55}
+  .muted{color:var(--dim); font-size:12.5px}
+
+  /* ---------- 计划组 ---------- */
+  .group{border:1px solid var(--line); border-radius:12px; background:var(--panel2); padding:10px 12px; margin-bottom:10px}
+  .group-head{display:flex; align-items:center; gap:10px; margin-bottom:8px}
+    .group-head .plan-desc{flex:1; color:#c9d1dd; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .group-head .plan-desc b{color:#fff; font-weight:600}
+
+  /* 代码弹窗 */
+  .modal{position:fixed; inset:0; background:rgba(8,10,14,.72); display:flex; align-items:center; justify-content:center; z-index:100}
+  .modal[hidden]{display:none}
+  .modal-box{width:min(720px,92vw); max-height:80vh; display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 60px rgba(0,0,0,.55)}
+  .modal-head{display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line)}
+  .modal-head strong{flex:1; font-size:13.5px}
+  .modal-body{padding:14px 16px; overflow:auto}
+  .modal-body pre{margin:0; font-family:Consolas,"Cascadia Mono",monospace; font-size:12.5px; line-height:1.6; color:#9ecbff; white-space:pre-wrap; word-break:break-word}
+  .providerBar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:8px 10px; margin-bottom:12px}
+  .providerBar select{background:#11141a; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:5px 8px; font:inherit; font-size:12.5px}
+  .providerBar input{background:#11141a; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:5px 8px; font:inherit; font-size:12.5px; width:200px}
+  .providerBar input.tiny-input{width:110px}
+  .gate-input{width:64px; font-size:11px; opacity:.75; background:#11141a; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:2px 4px}
+  .gate-input:focus{opacity:1}
+  .chips{display:flex; flex-wrap:wrap; gap:7px}
+  .chip{
+    display:inline-flex; align-items:center; gap:5px;
+    background:#232832; border:1px solid #2f3644; border-radius:9px; padding:3px 4px 3px 9px;
+  }
+  .chip.sel{border-color:var(--accent); background:#1b2438}
+  .chip.sel b{color:#c3d3ff}
+  .chip b{font-weight:600; font-size:13px; cursor:pointer}
+  .chip button{border:none; background:transparent; color:var(--dim2); padding:0 3px; font-size:13px; line-height:1}
+  .chip button:hover{color:#f0a3a7; background:transparent}
+  .chip.add{border-style:dashed; background:transparent; color:var(--dim); padding:4px 9px; cursor:pointer}
+  .chip.add:hover{color:var(--text); border-color:var(--accent)}
+  .chip input.newSyn{width:110px; border:none; background:transparent; padding:0 2px; font-size:12.5px}
+  .chip input.newSyn:focus{border:none}
+
+  /* ---------- 新增计划 ---------- */
+  .newplan{border:1px dashed #3a4250; border-radius:12px; padding:12px; background:#181b21}
+  textarea{width:100%; min-height:64px; background:#11141a; color:var(--text); border:1px solid var(--line); border-radius:9px; padding:8px 10px; font-family:Consolas,monospace; font-size:12px; resize:vertical}\n  .np-preview{margin:8px 0; color:var(--dim); font-size:12.5px; word-break:break-all}
+  .np-words{margin:8px 0}
+
+  /* ---------- 校准 ---------- */
+  .target{background:#22262f; border:1px solid var(--line); border-radius:10px; padding:9px 12px; margin-bottom:10px}
+  .target b{color:#c3d3ff; font-size:14px}
+  .kpi{display:flex; gap:18px; margin-top:10px}
+  .kpi div span{display:block; color:var(--dim2); font-size:11.5px}
+  .kpi div strong{font-size:15px; font-variant-numeric:tabular-nums}
+  .note{margin-top:8px; min-height:30px; color:var(--dim); font-size:12.5px}
+
+  .slots{display:flex; gap:8px; margin:12px 0 4px}
+  .slot{
+    flex:1; height:52px; border-radius:10px; border:1px dashed #39414f; background:#171a20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    font-size:11px; color:var(--dim2); position:relative; overflow:hidden; transition:.2s;
+  }
+  .slot.filled{border:1px solid #235c33; background:#16231a; color:#8fd6a1}
+  .slot.filled .mark{color:#3fb950; font-size:17px; line-height:1; animation:pop .38s cubic-bezier(.2,1.6,.4,1)}
+  .slot.filled .dur{font-size:11px; color:#7fb98d}
+  .slot.next{border-color:var(--accent); box-shadow:0 0 0 1px rgba(63,110,230,.35) inset}
+
+  .slot .mark{font-size:14px; line-height:1}
+  @keyframes pop{0%{transform:scale(.2); opacity:0} 60%{transform:scale(1.25)} 100%{transform:scale(1); opacity:1}}
+  .slotWarn{margin-top:8px; padding:7px 10px; border-radius:9px; background:#33252a; border:1px solid #5c3636; color:#f0b3b6; font-size:12.5px}
+
+  /* ---------- 事件 ---------- */
+  .events{max-height:210px; overflow:auto; font-size:12.5px}
+  .ev{display:flex; gap:8px; padding:3px 0; border-bottom:1px dashed #232830; align-items:baseline}
+  .ev time{color:var(--dim2); font-variant-numeric:tabular-nums; flex:none}
+  .tag{flex:none; padding:0 6px; border-radius:5px; font-size:11px; background:#242a34; color:var(--dim)}
+  .tag.ok{background:#17301f; color:#74d38d}
+  .tag.bad{background:#331b1e; color:#f0a3a7}
+  .tag.acc{background:#1b2438; color:#c3d3ff}
+</style>
+</head>
+<body>
+<header>
+  <h1>VoiceKeys</h1>
+  <span class="pill"><span id="led" class="led"></span><b id="status">连接中…</b></span>
+  <span class="pill">源 <b id="source">-</b></span>
+  <span class="pill">麦克风 <b id="mic">-</b></span>
+  <span class="pill">Handy <b id="handy">-</b></span>
+  <span class="pill">静音门 <b id="gate">-</b></span>
+</header>
+
+<main>
+  <div class="col">
+    <section class="panel">
+      <h2>计划与关键词 <span class="count" id="planCount"></span></h2>
+
+      <div class="providerBar">
+        <span class="muted">生成方式</span>
+        <select id="providerSel"></select>
+        <span id="providerFields" class="row" style="flex:1;gap:6px"></span>
+        <button class="tiny" id="btnProviderSave">保存</button>
+        <span class="muted" id="providerNote"></span>
+      </div>
+      <div id="planList"></div>
+
+      <div id="newPlanHost" style="margin-top:12px"></div>
+      <button id="btnAddPlan" class="ghost" style="margin-top:10px; width:100%">＋ 新增计划</button>
+      <div class="hint" style="margin-top:8px">
+        一个计划一行；同一计划的多个关键词并排放在一起。点词名＝设为校准目标，词旁数字是旧的 KWS 门限（现在不影响识别，仅供参考），× 解绑。
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>事件</h2>
+      <div class="events" id="events"></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="panel">
+      <h2>自校准（采集 → 老师复核）</h2>
+      <div class="target">已采集 <b id="capCount">0</b> / <input id="capMaxInput" type="number" min="20" max="5000" step="50" style="width:64px" title="采集上限，改完回车生效"> · <label style="cursor:pointer"><input type="checkbox" id="capAutoClean" style="vertical-align:-2px"> 满了自动删废数据</label> · <button class="tiny" id="btnCleanCap" title="删除转写为空/无语音/文件缺失的废数据">清理废数据</button></div><div class="target" style="display:none">已采集 <b id="capCountDup">0</b> / <span id="capMax">100</span>　<span class="muted" id="capNote"></span></div>
+      <div id="scoreLine" style="margin:6px 0;padding:6px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px"></div>
+      <div class="muted" style="margin:4px 0">当前匹配阈值 <b id="thNow">0.70</b>　<button class="tiny" id="btnApplyThreshold" hidden>采纳报表建议</button></div>
+      <div class="row">
+        <button class="primary" id="btnCalibrate" style="flex:1">用老师模型复核</button>
+        <button id="btnCapToggle">暂停采集</button>
+        <button class="danger" id="btnCapClear">清空</button>
+      </div>
+      <div class="muted" id="capOptimized" style="margin:4px 0"></div>
+      <div class="row" style="margin-bottom:6px"><button class="tiny" id="btnDiag">诊断 10 分钟（每句话都存）</button></div>
+      <div class="note" id="calibProgress"></div>
+      <div id="reportBox"></div>
+      <div class="hint">采集只保留“有信息量”的段：触发过的、分数在 0.40~0.85 之间的、有声但没转出字的；最多 100 段，存满即停。复核用 Handy 同款 Qwen3-ASR-0.6B（本地，一次加载约 1.5 秒，每段约 0.1~0.3 秒）。</div>
+    </section>
+
+    <section class="panel">
+      <h2>快照与恢复</h2>
+      <div class="row">
+        <button id="btnSnapshot" style="flex:1">给当前代码打快照</button>
+        <button id="btnRestoreList">选择恢复…</button>
+      </div>
+      <div id="snapshotBox"></div>
+      <div class="hint">改算法 / 改脚本前先打快照；改坏了点「选择恢复」回到任一版本。恢复前的改动会存进 git stash，不会丢。</div>
+    </section>
+
+  </div>
+<div class="panel" id="algoPanel">
+        <div class="title">算法（可自定义）<span class="tag" id="algoStatus">—</span></div>
+        <div class="row" style="gap:8px;align-items:center;margin-bottom:8px">
+          <select id="algoRole" class="tiny">
+            <option value="matcher">匹配算法（计算相似度）</option>
+            <option value="gate">静音门策略</option>
+            <option value="sampler">采集采样策略</option>
+          </select>
+          <button class="tiny" id="algoBackup">① 备份并开始编辑</button>
+          <button class="tiny" id="algoSave">保存</button>
+          <button class="tiny" id="algoRestoreAll">② 一键还原全部</button>
+          <button class="tiny" id="algoLoad">读取当前代码</button>
+          <span class="muted" id="algoHint">改完需要重启才生效</span>
+        </div>
+        <textarea id="algoSource" spellcheck="false" style="width:100%;height:220px;background:#0b0e14;color:#cfe3ee;border:1px solid #22303c;border-radius:8px;padding:10px;font:12px/1.6 Consolas,monospace;resize:vertical"></textarea>
+        <div class="muted" style="margin-top:6px">契约见 <code>app/algorithms/README.md</code>：matcher 必须导出 match / bestScore。保存前会做语法和必要方法检查，坏代码不会落盘。</div>
+      </div>
+
+
+      <div class="panel" id="calibPanel">
+        <div class="title">校准（实验功能，默认关闭）<span class="tag" id="calibState">—</span></div>
+        <div class="row" style="gap:8px;align-items:center;margin-bottom:8px">
+          <label style="cursor:pointer"><input type="checkbox" id="calibEnabled" style="vertical-align:-2px"> 启用校准（实验性）</label>
+          <label style="cursor:pointer"><input type="checkbox" id="calibExpand" style="vertical-align:-2px"> 展开</label>
+          <button class="tiny" id="calibRun">跑一次校准</button>
+          <span class="muted" id="calibHint">用老师模型复核素材，给出"加/删同义词"的建议</span>
+        </div>
+        <div id="calibBody" style="display:none">
+          <div class="row" style="margin-bottom:8px"><button class="tiny" id="calibRunBtn">跑一次校准</button><span class="muted" id="calibHint2" style="margin-left:8px">用老师模型复核素材，给出加/删同义词的建议</span></div>
+          <div id="calibList"></div>
+        </div>
+      </div>
+
+</main>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <strong>计划代码</strong>
+      <button class="tiny ghost" id="modalClose">关闭</button>
+    </div>
+    <div class="modal-body"><pre id="modalCode"></pre></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+// ---------------------------------------------------------------- 状态
+const ui = {
+  selected: '',          // 校准目标
+  synFor: null,          // 正在加同义词的计划 key
+  newPlanOpen: false,
+  newPlan: { utterance: '', plan: null, words: [], busy: false, error: '' },
+  structureKey: '',
+  takeMark: 0,
+  takeLocalStart: 0,
+  analyzeMark: 0,
+  analyzeLocalStart: 0,
+  lastState: null,
+};
+
+async function api(path, body) {
+  const opts = body === undefined ? {} : { method: 'POST', body: JSON.stringify(body) };
+  const res = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts });
+  const text = await res.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+// ---------------------------------------------------------------- 顶部
+function renderHeader(s) {
+  $('status').textContent = s.mode === 'recording' ? '录音中' : '监听中';
+  $('led').className = 'led ' + (s.mode === 'recording' ? 'rec' : 'on');
+  $('source').textContent = s.source;
+  $('mic').textContent = `#${s.device} · ${s.peak2s}`;
+  $('mic').style.color = s.peak2s > 0.02 ? '#74d38d' : 'inherit';
+  $('handy').textContent = s.handyRecording === true ? '录音中' : s.handyRecording === false ? '空闲' : '未知';
+  $('handy').style.color = s.handyRecording === true ? '#c3d3ff' : 'inherit';
+  $('gate').textContent = `${s.pauseMs}ms`;
+}
+
+// ---------------------------------------------------------------- 计划 → 自然语言
+const KEY_NAMES = {
+  enter: '回车', space: '空格', esc: 'Esc', tab: 'Tab', backspace: '退格',
+  up: '↑', down: '↓', left: '←', right: '→',
+  volume_up: '音量+键', volume_down: '音量-键', volume_mute: '静音键',
+  media_play_pause: '播放/暂停键', media_next: '下一首键', media_prev: '上一首键',
+  ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', win: 'Win',
+};
+
+function keyName(k) {
+  return KEY_NAMES[k] || k;
+}
+
+function describeStep(s) {
+  const p = s || {};
+  switch (p.op) {
+    case 'audio.volume.set':
+      return '读取系统音量接口，把主音量直接写成 ' + p.percent + '%（不发声、不弹音量条）';
+    case 'audio.volume.delta': {
+      const dir = p.percent > 0 ? '加' : '减';
+      const n = Math.abs(p.percent);
+      if (p.mode === 'api') return '读取当前音量，然后直接用系统音量接口' + dir + ' ' + n + '%（不发声）';
+      if (p.mode === 'key') return '连按 ' + Math.max(1, Math.round(n / 2)) + ' 次系统音量' + (p.percent > 0 ? '加' : '减') + '键（会弹出音量条）';
+      return '先用系统音量接口把音量精确' + dir + ' ' + n + '%，再补按一次音量' + (p.percent > 0 ? '加' : '减') + '键，让系统的音量条弹出来给你看';
+    }
+    case 'audio.mute.toggle':
+      return '读当前的静音状态，然后把它反过来（静音↔取消静音），用的是系统音量接口的静音开关';
+    case 'audio.mute.set':
+      return p.muted ? '用系统音量接口把主音量设为静音' : '用系统音量接口取消静音';
+    case 'display.brightness.set':
+      return '通过系统 WMI 把内置屏幕亮度设成 ' + p.percent + '%（外接显示器通常无效）';
+    case 'display.brightness.delta':
+      return '先读当前亮度，再通过 WMI 把内置屏幕亮度' + (p.percent > 0 ? '调高 ' : '调低 ') + Math.abs(p.percent) + '%';
+    case 'media.toggle': {
+      const find = p.app ? '在窗口列表里找标题匹配 ' + p.app + ' 的播放器窗口' : '在窗口列表里找播放器窗口（匹配常见播放器/浏览器标题）';
+      const tail = p.action === 'play'
+        ? '，焦点留在播放器上'
+        : (p.restoreFocus !== false ? '，再把焦点还给刚才那个窗口' : '');
+      return find + ' → 把它切到前台 → 按一下空格键' + tail + '。注意空格是"播放/暂停"开关，不区分当前状态';
+    }
+    case 'key.press':
+      return '模拟一次真实按键（带扫描码），把「' + keyName(p.key) + '」键发给当前焦点窗口';
+    case 'handy.set':
+      return p.target === 'on'
+        ? '读 Handy 的录音状态，如果没在录，就调起 handy.exe 开始录音（已经在录则不动）'
+        : p.target === 'off'
+          ? '读 Handy 的录音状态，如果正在录，就调起 handy.exe 停止录音并转写（没在录则不动）'
+          : '读 Handy 的录音状态，然后切换开/关';
+    case 'flow.wait':
+      return '停 ' + p.ms + ' 毫秒再执行下一步';
+    case 'flow.repeat':
+      return '把后面的步骤重复 ' + p.times + ' 次';
+    case 'flow.if':
+      return '按条件决定要不要执行后面的步骤';
+    default:
+      if (typeof p.op === 'string' && p.op.startsWith('custom.')) return '调用你自己写的脚本：' + p.op.slice(7);
+      return p.op || '未知动作';
+  }
+}
+function describePlan(steps) {
+  const list = (steps || []).map(describeStep);
+  return list.length ? list.join(' → ') : '（空计划）';
+}
+
+// ---------------------------------------------------------------- 计划列表
+function groupPlans(plans) {
+  const map = new Map();
+  for (const p of plans || []) {
+    const key = JSON.stringify(p.plan && p.plan.steps);
+    if (!map.has(key)) map.set(key, { key, steps: (p.plan && p.plan.steps) || [], words: [] });
+    map.get(key).words.push(p.say);
+  }
+  return [...map.values()];
+}
+
+
+
+function gateOf(s, word) {
+  const list = (s && s.words) || [];
+  const hit = list.find((x) => x.word === word);
+  return hit && Number.isFinite(Number(hit.pauseMs)) ? Number(hit.pauseMs) : 1000;
+}
+
+function renderPlans(s) {
+  const groups = groupPlans(s.plans);
+  $('planCount').textContent = groups.length ? `${groups.length} 行 · ${(s.plans || []).length} 个词` : '';
+
+  const key = groups.map((g) => g.key + ':' + g.words.join(',')).join('|') + '#' + ui.selected + '#' + ui.synFor;
+  if (key !== ui.structureKey) {
+    ui.structureKey = key;
+    $('planList').innerHTML = groups.map((g) => {
+      const chips = g.words.map((w) => {
+        const sel = w === ui.selected ? ' sel' : '';
+        return `<span class="chip${sel}">
+          <b data-select="${esc(w)}">${esc(w)}</b>
+          <input type="number" step="50" min="0" max="5000" data-gate="${esc(w)}" value="${gateOf(s, w)}" class="gate-input" title="静音门毫秒数（说完后等多久执行）">
+          <input type="number" step="0.05" min="0" max="1" data-m1="${esc(w)}" value="${thOf(s, w, 'm1')}" class="gate-input" style="width:56px" title="M1 阈值：M1 对这句话的相似度达到多少才算很自信（空=用全局 0.95）">
+          <input type="number" step="0.05" min="0" max="1" data-m2="${esc(w)}" value="${thOf(s, w, 'm2')}" class="gate-input" style="width:56px" title="M2 阈值：M2 对这句话的相似度达到多少才认可它（空=用全局 0.70）">
+          <button data-unbind="${esc(w)}" title="解绑">×</button>
+        </span>`;
+      }).join('');
+
+      const syn = ui.synFor === g.key
+        ? `<span class="chip add"><input class="newSyn" type="text" data-syn="${esc(g.key)}" placeholder="新词，回车保存"></span>`
+        : `<button class="chip add" data-addsyn="${esc(g.key)}">＋ 同义词</button>`;
+
+      return `<div class="group" data-group="${esc(g.key)}">
+        <div class="group-head">
+          <div class="plan-desc">${esc(describePlan(g.steps))}</div>
+          <button class="tiny ghost" data-code="${esc(g.key)}" title="查看计划代码">{ }</button>
+        </div>
+        <div class="chips">${chips}${syn}</div>
+      </div>`;
+    }).join('') || '<div class="muted">还没有任何计划，点下面的「新增计划」开始。</div>';
+
+    // 加同义词时自动聚焦
+    const input = document.querySelector('input[data-syn]');
+    if (input) setTimeout(() => input.focus(), 0);
+    return;
+  }
+
+  // 结构没变：只刷新没在编辑的阈值
+  for (const w of s.words || []) {
+    const input = document.querySelector(`input[data-word="${CSS.escape(w.word)}"]`);
+    if (!input) continue;
+    if (document.activeElement !== input && ui.draft[w.word] === undefined) input.value = w.threshold;
+  }
+}
+
+// ---------------------------------------------------------------- 自校准面板
+function renderCapture(s) {
+  const optimized = (s.capture && s.capture.optimizedWords) || [];
+  const sc = s.score || {};
+  const line = $('scoreLine');
+  if (line) {
+    if (sc.percent == null) {
+      line.innerHTML = '<span class="muted">识别率：还没有结算过（跑一次复核就会开始累计）</span>';
+    } else {
+      const trend = (sc.trend || []).join('% → ');
+      line.innerHTML = '识别率 <b style="font-size:15px">' + sc.percent.toFixed(1) + '%</b>'
+        + ' <span class="muted">（' + sc.numerator + '/' + sc.denominator + '）</span>　'
+        + '<span class="muted">真真 ' + (sc.events?.truePositive || 0)
+        + ' · 误触发 ' + (sc.events?.falsePositive || 0)
+        + ' · 漏检 ' + (sc.events?.falseNegative || 0) + '</span>'
+        + (trend ? '<div class="muted" style="font-size:11px">最近几批：' + trend + '</div>' : '');
+    }
+  }
+  const optEl = $('capOptimized');
+  if (optEl) optEl.textContent = optimized.length ? ('已优化（不再占采样配额）：' + optimized.join('、')) : '';
+  const cap = s.capture || { count: 0, max: 100, enabled: true, full: false };
+  $('capCount').textContent = cap.count;
+  if ($('capMaxInput') && document.activeElement !== $('capMaxInput')) $('capMaxInput').value = cap.max || 500;
+  $('capMax').textContent = cap.max;
+  const bits = [];
+  if (!cap.enabled) bits.push('已暂停采集');
+  else if (cap.full) bits.push('已存满，停止采集');
+  if (cap.skipped) bits.push('已跳过 ' + cap.skipped + ' 段');
+  $('capNote').textContent = bits.join(' · ');
+  const tgl = $('btnCapToggle');
+  if (tgl) tgl.textContent = cap.enabled ? '暂停采集' : '继续采集';
+
+  if (ui.calibrating) {
+    const p = s.calibrateProgress;
+    $('calibProgress').textContent = p ? ('老师复核中 ' + p.done + '/' + p.total + '…') : '老师复核中…';
+  } else if (ui.lastReportText) {
+    $('calibProgress').textContent = ui.lastReportText;
+  }
+}
+
+function renderReport(rep) {
+  const box = $('reportBox');
+  if (!box) return;
+  if (!rep) { box.innerHTML = ''; return; }
+  if (rep.error) { box.innerHTML = '<div class="slotWarn">' + esc(rep.error) + '</div>'; return; }
+  const s = rep.summary || {};
+  const head = '<div class="muted" style="margin-top:8px">共 ' + (s.total || 0) + ' 段：命中 ' + (s.truePositive || 0)
+    + '，漏检 ' + (s.falseNegative || 0) + '，误触发 ' + (s.falsePositive || 0)
+    + '，词不对 ' + (s.wrongWord || 0) + '（模型听错 ' + (s.modelError || 0) + ' / 规则太严或太松 ' + (s.ruleError || 0) + '）</div>';
+  const rows = (rep.rows || []).slice(0, 30).map((r) => '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.ourText || '—') + '</td><td>' + esc(r.teacherText || '—') + '</td><td>' + esc(r.verdict) + '</td></tr>').join('');
+  const table = '<div style="max-height:220px;overflow:auto;margin-top:6px"><table><thead><tr><th style="width:44px">#</th><th>我们的转写</th><th>老师转写</th><th>判定</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  const sug = (rep.suggestions && rep.suggestions.length)
+    ? '<div class="slotWarn" style="margin-top:8px">' + rep.suggestions.map(esc).join('<br>') + '</div>'
+    : '';
+  let advice = '';
+  const applyBtn = $('btnApplyThreshold');
+  if (applyBtn) applyBtn.hidden = !rep.thresholdAdvice;
+  if (rep.thresholdAdvice) {
+    const a = rep.thresholdAdvice;
+    advice = '<div class="slotWarn" style="margin-top:8px">建议匹配阈值 <b>' + a.threshold.toFixed(2) + '</b>：' + esc(a.reason)
+      + '（精确率 ' + a.precision.toFixed(2) + '，召回率 ' + a.recall.toFixed(2) + '，误触发 ' + a.fp + '，漏检 ' + a.fn + '）'
+      + (a.reliable ? '' : '　⚠ 样本只有 ' + a.sampleSize + ' 段，仅供参考') + '</div>';
+  }
+  let sweep = '';
+  if (rep.thresholdSweep && rep.thresholdSweep.length) {
+    const srows = rep.thresholdSweep.map((x) => '<tr><td>' + x.threshold.toFixed(2) + '</td><td>' + x.precision.toFixed(2)
+      + '</td><td>' + x.recall.toFixed(2) + '</td><td>' + x.fp + '</td><td>' + x.fn + '</td></tr>').join('');
+    sweep = '<div style="max-height:160px;overflow:auto;margin-top:8px"><table><thead><tr><th>阈值</th><th>精确率</th><th>召回率</th><th>误触发</th><th>漏检</th></tr></thead><tbody>'
+      + srows + '</tbody></table></div>';
+  }
+  box.innerHTML = head + advice + sug + sweep + table;
+}
+
+// ---------------------------------------------------------------- 事件
+function renderEvents(s) {
+  $('events').innerHTML = (s.events || []).map((e) => {
+    const t = new Date(e.at).toLocaleTimeString();
+    const tag = (cls, label) => `<span class="tag ${cls}">${label}</span>`;
+    let body = '';
+    switch (e.type) {
+      case 'fire': body = tag('ok', '触发') + esc(e.word); break;
+      case 'heard': body = tag('', '听到') + `${esc(e.word)}（等 ${e.waitMs}ms）`; break;
+      case 'drop': body = tag('bad', '丢弃') + `${esc(e.word)}：${esc(e.reason)}`; break;
+      case 'ignored': body = tag('', '忽略') + `${esc(e.word)}：${esc(e.reason)}`; break;
+      case 'handy': body = tag('acc', 'Handy') + esc(e.reason); break;
+      case 'result': body = tag(e.ok ? 'ok' : 'bad', e.ok ? '完成' : '失败') + esc(e.detail || ''); break;
+      case 'error': body = tag('bad', '错误') + esc(e.message || ''); break;
+      default: return '';
+    }
+    return `<div class="ev"><time>${t}</time>${body}</div>`;
+  }).join('') || '<div class="muted">暂无事件</div>';
+}
+
+// ---------------------------------------------------------------- 新增计划
+function renderNewPlan() {
+  const host = $('newPlanHost');
+  const np = ui.newPlan;
+
+  if (!ui.newPlanOpen) {
+    if (host.innerHTML) host.innerHTML = '';
+    ui.npBuilt = false;
+    return;
+  }
+
+  // 只在打开时建一次 DOM；之后只更新状态，避免每秒刷新把输入框清空
+  if (!ui.npBuilt) {
+    ui.npBuilt = true;
+    host.innerHTML = `
+      <div class="newplan">
+        <div class="row">
+          <input type="text" id="npUtter" placeholder="用一句话描述动作，例如：把系统音量调到 40%">
+          <button class="primary" id="npGen">生成计划</button>
+        </div>
+        <div class="np-preview" id="npPreview"></div>
+        <div id="npManual" style="display:none;margin:8px 0">
+          <div class="muted" style="margin-bottom:6px">
+            计划文件路径（手写或让你的 agent 往这里写都可以）：
+            <code id="npPath" style="user-select:all">…</code>
+            <button class="tiny" id="npCopyPath" style="margin-left:6px">复制</button>
+          </div>
+          <textarea id="npJson" placeholder='粘贴计划 JSON，例如 {"steps":[{"op":"audio.volume.set","percent":35}]}'></textarea>
+          <button class="tiny" id="npUseJson" style="margin-top:6px">用这段 JSON</button>
+        </div>
+        <div class="np-words">
+          <div class="row">
+            <input type="text" id="npWord" placeholder="关键词，回车添加（可多个），例如：音量四十">
+          </div>
+          <div class="chips" id="npChips" style="margin-top:8px"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="primary" id="npSave">保存</button>
+          <button class="ghost" id="npCancel">取消</button>
+        </div>
+      </div>`;
+    setTimeout(() => $('npUtter')?.focus(), 0);
+  }
+
+  const genBtn = $('npGen');
+  if (genBtn) { genBtn.disabled = Boolean(np.busy); genBtn.textContent = np.busy ? '生成中…' : '生成计划'; }
+  const prev = $('npPreview');
+  if (prev) {
+    if (np.busy) prev.textContent = '正在调用 ' + (ui.providerLabel || '模型') + '…';
+    else if (np.error) prev.textContent = '错误：' + np.error;
+    else if (np.plan) prev.innerHTML = '计划：<code>' + esc(JSON.stringify(np.plan.steps)) + '</code>';
+    else prev.textContent = '写一句话生成计划，或切到「手写」直接粘贴 JSON。';
+  }
+  const chips = $('npChips');
+  if (chips) chips.innerHTML = np.words.map((w) => '<span class="chip">' + esc(w) + '<button data-npdel="' + esc(w) + '">×</button></span>').join('');
+  const wordInput = $('npWord');
+  if (wordInput) wordInput.disabled = !np.plan;
+  const saveBtn = $('npSave');
+  if (saveBtn) saveBtn.disabled = !(np.plan && np.words.length);
+}
+// ---------------------------------------------------------------- 生成方式设置
+const PROVIDER_LABEL = { manual: '手写', ollama: '本地 Ollama', openai: 'OpenAI 兼容 API', deepseek: 'DeepSeek 官方 API' };
+
+function renderProvider(s) {
+  ui.settings = ui.settings || {};
+  const sel = $('providerSel');
+  if (!sel.options.length) {
+    sel.innerHTML = (s.presets || []).map((p) => `<option value="${p.id}">${esc(p.label)}</option>`).join('');
+    sel.onchange = () => { ui.settings.provider = sel.value; renderProviderFields(); };
+  }
+  const cur = s.provider || 'ollama';
+  if (sel.value !== cur) sel.value = cur;
+  ui.settings.provider = cur;
+  ui.providerLabel = PROVIDER_LABEL[cur] || cur;
+  renderProviderFields();
+}
+
+function renderProviderFields() {
+  const box = $('providerFields');
+  const s = ui.settings || {};
+  const p = s.provider || 'ollama';
+  const input = (id, ph, val, cls) => `<input id="${id}" class="${cls || ''}" placeholder="${esc(ph)}" value="${esc(val || '')}">`;
+
+  if (p === 'manual') {
+    box.innerHTML = '<span class="muted">生成计划这一步跳过，直接在下面粘贴 JSON 再绑定关键词。</span>';
+  } else if (p === 'ollama') {
+    box.innerHTML = input('setOllamaUrl', 'http://127.0.0.1:11434', s.ollamaUrl, '')
+      + input('setOllamaModel', '模型名，如 qwen3.5:9b', s.ollamaModel, 'tiny-input')
+      + '<button class="tiny" id="btnOllamaCheck">检查</button>';
+  } else if (p === 'openai') {
+    box.innerHTML = input('setOpenaiUrl', 'https://api.openai.com/v1', s.openaiUrl, '')
+      + input('setOpenaiKey', 'API key', s.openaiKey, 'tiny-input')
+      + input('setOpenaiModel', '模型，如 gpt-4o-mini', s.openaiModel, 'tiny-input');
+  } else if (p === 'deepseek') {
+    box.innerHTML = input('setDeepseekKey', 'API key（sk-...）', s.deepseekKey, '')
+      + input('setDeepseekModel', '模型，如 deepseek-chat', s.deepseekModel, 'tiny-input');
+  }
+}
+
+async function loadSettings() {
+  try {
+    const s = await api('/api/settings');
+    ui.settings = s;
+    renderProvider(s);
+  } catch (e) { $('providerNote').textContent = '读取设置失败: ' + e.message; }
+}
+
+async function saveProvider() {
+  const el = (id) => ($(id) ? $(id).value.trim() : undefined);
+  const patch = { provider: ui.settings.provider };
+  const setIf = (k, v) => { if (v !== undefined && v !== '') patch[k] = v; };
+  setIf('ollamaUrl', el('setOllamaUrl'));
+  setIf('ollamaModel', el('setOllamaModel'));
+  setIf('openaiUrl', el('setOpenaiUrl'));
+  setIf('openaiKey', el('setOpenaiKey'));
+  setIf('openaiModel', el('setOpenaiModel'));
+  setIf('deepseekKey', el('setDeepseekKey'));
+  setIf('deepseekModel', el('setDeepseekModel'));
+  try {
+    const r = await api('/api/settings', { method: 'POST', body: JSON.stringify(patch) });
+    ui.settings = r.settings;
+    renderProvider(r.settings);
+    $('providerNote').textContent = '已保存（' + (PROVIDER_LABEL[patch.provider] || patch.provider) + '）';
+  } catch (e) { $('providerNote').textContent = '保存失败: ' + e.message; }
+}
+
+// ---------------------------------------------------------------- 交互
+document.addEventListener('change', async (ev) => {
+  const input = ev.target.closest('input[data-gate]');
+  if (!input) return;
+  const word = input.dataset.gate;
+  const ms = Number(input.value);
+  if (!Number.isFinite(ms) || ms < 0 || ms > 5000) return;
+  const s = await api('/api/gate', { word, pauseMs: ms }).catch(() => null);
+  if (s && s.ok) {
+    ui.lastReportText = '「' + word + '」静音门已设为 ' + ms + 'ms（立即生效）';
+    render(s);
+  }
+});
+
+document.addEventListener('click', async (ev) => {
+  const codeBtn = ev.target.closest('[data-code]');
+  if (codeBtn) {
+    const group = groupPlans(ui.lastState?.plans || []).find((g) => g.key === codeBtn.dataset.code);
+    $('modalCode').textContent = JSON.stringify({ steps: group ? group.steps : [] }, null, 2);
+    $('modal').hidden = false;
+    return;
+  }
+  if (ev.target.id === 'modalClose' || ev.target.id === 'modal') { $('modal').hidden = true; return; }
+  const sel = ev.target.closest('[data-select]');
+  if (sel) {
+    ui.selected = sel.dataset.select;
+    ui.structureKey = '';
+    const s = await api(`/api/select`, { word: ui.selected }).catch(() => null);
+    if (s) render(s);
+    return;
+  }
+  const unb = ev.target.closest('[data-unbind]');
+  if (unb) {
+    await api('/api/unbind', { phrase: unb.dataset.unbind }).catch(() => {});
+    ui.structureKey = '';
+    refresh();
+    return;
+  }
+  const add = ev.target.closest('[data-addsyn]');
+  if (add) { ui.synFor = add.dataset.addsyn; ui.structureKey = ''; refresh(); return; }
+
+  const del = ev.target.closest('[data-npdel]');
+  if (del) {
+    ui.newPlan.words = ui.newPlan.words.filter((w) => w !== del.dataset.npdel);
+    renderNewPlan();
+    return;
+  }
+  if (ev.target.id === 'btnAddPlan') {
+    ui.newPlanOpen = true;
+    ui.newPlan = { utterance: '', plan: null, words: [], busy: false, error: '' };
+    renderNewPlan();
+    setTimeout(() => $('npUtter')?.focus(), 0);
+    return;
+  }
+  if (ev.target.id === 'npCopyPath') {
+      const el = document.getElementById('npPath');
+      if (el) { try { await navigator.clipboard.writeText(el.textContent.trim()); } catch { /* ignore */ } }
+      return;
+    }
+    if (ev.target.id === 'npUseJson') {
+    const raw = (npJson && npJson.value || '').trim();
+    if (!raw) { ui.newPlan.error = '还没粘贴内容'; renderNewPlan(); return; }
+    try {
+      const parsed = JSON.parse(raw);
+      const steps = parsed.steps || parsed;
+      if (!Array.isArray(steps) || !steps.length) throw new Error('JSON 里没有 steps 数组');
+      ui.newPlan.plan = { steps };
+      ui.newPlan.error = '';
+    } catch (e) {
+      ui.newPlan.error = 'JSON 解析失败: ' + e.message;
+    }
+    renderNewPlan();
+    return;
+  }
+  if (ev.target.id === 'npCancel') { ui.newPlanOpen = false; renderNewPlan(); return; }
+  if (ev.target.id === 'npGen') {
+    const text = $('npUtter').value.trim();
+    if (!text) return;
+    ui.newPlan.utterance = text;
+    ui.newPlan.busy = true; ui.newPlan.error = '';
+    renderNewPlan();
+    try {
+      const gen = await api('/api/plan', { text });
+      if (!gen.ok) { ui.newPlan.error = (gen.errors || []).join(';'); ui.newPlan.plan = null; }
+      else { ui.newPlan.plan = gen.plan; ui.newPlan.error = ''; }
+    } catch (e) { ui.newPlan.error = e.message; }
+    ui.newPlan.busy = false;
+    renderNewPlan();
+    setTimeout(() => $('npWord')?.focus(), 0);
+    return;
+  }
+  if (ev.target.id === 'npSave') {
+    const np = ui.newPlan;
+    if (!np.plan || !np.words.length) return;
+    for (const w of np.words) await api('/api/bind', { phrase: w, plan: np.plan }).catch(() => {});
+    ui.newPlanOpen = false;
+    ui.structureKey = '';
+    refresh();
+    return;
+  }
+});
+
+document.addEventListener('keydown', async (ev) => {
+  if (ev.key === 'Escape' && !modal.hidden) { modal.hidden = true; return; }
+  // 同义词输入：回车保存，Esc 取消
+  if (ev.target.matches('input[data-syn]') && ev.key === 'Enter') {
+    const word = ev.target.value.trim();
+    const groupKey = ev.target.dataset.syn;
+    if (!word) return;
+    const group = groupPlans(ui.lastState?.plans || []).find((g) => g.key === groupKey);
+    if (!group) return;
+    await api('/api/bind', { phrase: word, plan: { steps: group.steps } }).catch(() => {});
+    ui.synFor = null; ui.structureKey = '';
+    refresh();
+  }
+  if (ev.target.matches('input[data-syn]') && ev.key === 'Escape') {
+    ui.synFor = null; ui.structureKey = ''; refresh();
+  }
+  if (ev.target.id === 'npWord' && ev.key === 'Enter') {
+    const w = ev.target.value.trim();
+    if (!w) return;
+    if (!ui.newPlan.words.includes(w)) ui.newPlan.words.push(w);
+    ui.newPlan.words = [...ui.newPlan.words];
+    renderNewPlan();
+    setTimeout(() => $('npWord')?.focus(), 0);
+  }
+  if (ev.target.id === 'npUtter' && ev.key === 'Enter') $('npGen')?.click();
+});
+
+// 阈值编辑：保留草稿，change 时保存
+document.addEventListener('input', (ev) => {
+  const input = ev.target.closest('input[data-word]');
+  if (input) ui.draft[input.dataset.word] = input.value;
+});
+
+document.addEventListener('change', async (ev) => {
+  const input = ev.target.closest('input[data-word]');
+  if (!input) return;
+  const word = input.dataset.word;
+  const value = Number(input.value);
+  delete ui.draft[word];
+  if (!Number.isFinite(value)) return;
+  const s = await api('/api/threshold', { word, value }).catch(() => null);
+  if (s) {
+    ui.lastReportText = '「' + word + '」阈值已保存为 ' + s.threshold;
+    ui.structureKey = '';
+    render(s);
+  }
+});
+
+// 匹配阈值：显示 + 一键采纳报表建议
+async function refreshThresholdLabel() {
+  try {
+    const s = await api('/api/settings');
+    const el = $('thNow');
+    if (el) el.textContent = (Number(s.matchThreshold) || 0.70).toFixed(2);
+    ui.currentThreshold = Number(s.matchThreshold) || 0.70;
+  } catch { /* ignore */ }
+}
+
+$('btnApplyThreshold').onclick = async () => {
+  const rep = ui.lastReport;
+  if (!rep || !rep.thresholdAdvice) return;
+  const v = rep.thresholdAdvice.threshold;
+  if (!confirm('把匹配阈值从 ' + (ui.currentThreshold || 0.70).toFixed(2) + ' 改成 ' + v.toFixed(2) + '？\n（可随时改回）')) return;
+  await api('/api/settings', { method: 'POST', body: JSON.stringify({ matchThreshold: v }) });
+  await refreshThresholdLabel();
+  ui.lastReportText = '匹配阈值已设为 ' + v.toFixed(2) + '（新值立即生效）';
+  renderCapture(ui.lastState);
+};
+
+refreshThresholdLabel();
+
+// ---- 算法面板（可自定义 + 一键还原）----
+async function algoLoadSource() {
+  const role = document.getElementById('algoRole').value;
+  const r = await api('/api/algorithms/source?role=' + encodeURIComponent(role));
+  if (r && r.source != null) {
+    document.getElementById('algoSource').value = r.source;
+    document.getElementById('algoStatus').textContent = r.active === 'user' ? '自定义' : '默认';
+    document.getElementById('algoHint').textContent = r.active === 'user' ? '当前用的是自定义实现（重启后生效）' : '当前是默认实现';
+  }
+}
+if (document.getElementById('algoLoad')) {
+document.getElementById('algoLoad').onclick = algoLoadSource;
+document.getElementById('algoRole').onchange = algoLoadSource;
+document.getElementById('algoSave').onclick = async () => {
+  const role = document.getElementById('algoRole').value;
+  const r = await api('/api/algorithms/save', { role, source: document.getElementById('algoSource').value });
+  if (r && r.error) { alert('保存失败：' + r.error); return; }
+  document.getElementById('algoHint').textContent = '已保存，重启后生效';
+  if (confirm('已保存。现在重启应用让它生效吗？')) await api('/api/restart', {});
+};
+document.getElementById('algoBackup').onclick = async () => {
+  const r = await api('/api/algorithms/backup', {});
+  if (r && r.error) { alert('备份失败：' + r.error); return; }
+  document.getElementById('algoHint').textContent = '已备份 ' + (r.count || 0) + ' 个脚本，可以开始改了';
+  alert('已备份 ' + (r.count || 0) + ' 个脚本（含设置里的指向）。\n现在可以放心改，改坏了点「② 一键还原全部」。');
+};
+document.getElementById('algoRestoreAll').onclick = async () => {
+  if (!confirm('把所有可编辑脚本还原到最近一次备份？')) return;
+  const r = await api('/api/algorithms/restore-all', {});
+  if (r && r.error) { alert('还原失败：' + r.error); return; }
+  alert('已还原到最近备份' + ((r.output || []).length ? '：\n' + r.output.join('\n') : ''));
+  await algoLoadSource();
+  if (confirm('现在重启应用吗？')) await api('/api/restart', {});
+};
+// 启动时尝试加载算法源码；这里出错不能影响后面的 refresh() 轮询
+try { algoLoadSource(); } catch (e) { console.warn('algoLoadSource:', e); }
+}
+
+$('btnCleanCap').onclick = async () => {
+    if (!confirm('删除废数据（转写为空 / 无语音 / 文件缺失）？这个不可撤销。')) return;
+    const r = await api('/api/capture/clean', {});
+    if (r && r.ok) alert('已删除 ' + r.removed + ' 条，保留 ' + r.kept + ' 条');
+    refresh();
+  };
+  $('capMaxInput').onchange = async () => {
+    const v = Math.max(20, Math.min(5000, Number($('capMaxInput').value) || 500));
+    await api('/api/settings', { captureMax: v });
+    refresh();
+  };
+  $('capAutoClean').onchange = async () => {
+    await api('/api/settings', { captureAutoClean: $('capAutoClean').checked });
+  };
+  $('btnDiag').onclick = async () => {
+  const r = await api('/api/capture/diagnostic', { method: 'POST', body: JSON.stringify({ minutes: 10 }) });
+  ui.lastReportText = r.diagnosticActive ? '诊断模式已开：10 分钟内每句话都会存下来（最多 40 段）' : '诊断模式已关';
+  refresh();
+};
+
+// 自校准按钮
+$('btnCapToggle').onclick = async () => {
+  const on = !(ui.lastState && ui.lastState.capture && ui.lastState.capture.enabled);
+  const st = await api('/api/capture/toggle', { method: 'POST', body: JSON.stringify({ enabled: on }) });
+  ui.lastReportText = on ? '已恢复采集' : '已暂停采集';
+  refresh();
+};
+$('btnCapClear').onclick = async () => {
+  if (!confirm('清空已采集的录音与报表？')) return;
+  await api('/api/capture/clear', { method: 'POST' });
+  ui.lastReportText = '已清空';
+  renderReport(null);
+  refresh();
+};
+$('btnCalibrate').onclick = async () => {
+  const cap = ui.lastState && ui.lastState.capture;
+  if (!cap || !cap.count) { ui.lastReportText = '还没有采集到录音'; renderCapture(ui.lastState); return; }
+  ui.calibrating = true;
+  $('calibProgress').textContent = '正在加载老师模型…';
+  try {
+    const r = await api('/api/calibrate/start', { method: 'POST' });
+    if (!r.ok) { ui.lastReportText = r.error || '启动失败'; }
+  } catch (e) { ui.lastReportText = '启动失败: ' + e.message; }
+  pollCalibration();
+};
+
+async function pollCalibration() {
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 1000));
+    let st;
+    try { st = await api('/api/calibrate/state'); } catch { break; }
+    if (st.running) {
+      const p = st.progress;
+      $('calibProgress').textContent = p ? ('老师复核中 ' + p.done + '/' + p.total + '…') : '老师复核中…';
+      continue;
+    }
+    ui.calibrating = false;
+    try {
+      const rep = await api('/api/calibrate/report');
+      if (rep && !rep.error) {
+        const sm = rep.summary || {};
+        ui.lastReportText = '上次结果：命中 ' + (sm.truePositive || 0) + '，漏检 ' + (sm.falseNegative || 0)
+          + '，误触发 ' + (sm.falsePositive || 0) + '，模型听错 ' + (sm.modelError || 0);
+      } else if (rep && rep.error) { ui.lastReportText = '校准失败: ' + rep.error; }
+      ui.lastReport = rep;
+      renderReport(rep);
+      renderCapture(ui.lastState);
+    } catch { /* ignore */ }
+    break;
+  }
+}
+
+// 快照
+$('btnSnapshot').onclick = async () => {
+  const msg = prompt('快照说明（可留空）', '手动快照');
+  if (msg === null) return;
+  try {
+    const r = await api('/api/snapshot', { method: 'POST', body: JSON.stringify({ message: msg || '手动快照' }) });
+    $('snapshotBox').innerHTML = r.ok ? ('<div class="muted">已保存快照 ' + esc(r.sha.slice(0, 8)) + '</div>') : ('<div class="slotWarn">' + esc(r.error) + '</div>');
+  } catch (e) { $('snapshotBox').innerHTML = '<div class="slotWarn">' + esc(e.message) + '</div>'; }
+};
+$('btnRestoreList').onclick = async () => {
+  const r = await api('/api/snapshots');
+  const list = (r.snapshots || []).slice(0, 8);
+  if (!list.length) { $('snapshotBox').innerHTML = '<div class="muted">没有快照</div>'; return; }
+  $('snapshotBox').innerHTML = '<div class="muted" style="margin-top:6px">点一个恢复（恢复前会把当前改动存进 git stash）：</div>'
+    + list.map((x) => '<div style="margin:3px 0"><button class="tiny" data-restore="' + esc(x.sha) + '">' + esc(x.when) + '</button> <span class="muted">' + esc(x.subject) + '</span></div>').join('');
+};
+
+window.addEventListener('beforeunload', () => {
+  if (ui.lastState && ui.lastState.mode === 'recording') navigator.sendBeacon('/api/quit-mic');
+});
+
+// 阈值输入框（事件委托，渲染后依然有效）
+document.addEventListener('change', async (ev) => {
+  const el = ev.target;
+  if (!el || !el.dataset) return;
+  const which = el.dataset.m1 !== undefined ? 'm1' : (el.dataset.m2 !== undefined ? 'm2' : null);
+  if (!which) return;
+  const word = el.dataset[which];
+  const item = ((ui.lastState && ui.lastState.words) || []).find((x) => x.word === word);
+  const cur = (item && item.thresholds) || { m1: null, m2: null };
+  const val = el.value === '' ? null : Number(el.value);
+  const body = { word, m1: which === 'm1' ? val : cur.m1, m2: which === 'm2' ? val : cur.m2 };
+  try { await api('/api/word/thresholds', body); } catch (e) { alert('设置失败：' + e.message); }
+  refresh();
+});
+
+// ---- 校准面板 ----
+async function loadCalib() {
+  try {
+    const r = await api('/api/calibrate/suggestions');
+    const box = document.getElementById('calibList');
+    const st = document.getElementById('calibState');
+    const en = document.getElementById('calibEnabled');
+    if (!box || !st || !en) return;
+    en.checked = Boolean(r.enabled);
+    const body = document.getElementById('calibBody');
+    const expand = document.getElementById('calibExpand');
+    if (body && expand) body.style.display = expand.checked ? 'block' : 'none';
+    if (!r.enabled) { st.textContent = '已关闭'; box.innerHTML = '<div class="muted">实验功能，默认关闭。勾上"启用校准"再跑。</div>'; return; }
+    if (r.running) { st.textContent = '正在跑…'; }
+    else if (r.at) { st.textContent = '上次 ' + new Date(r.at).toLocaleString(); }
+    else { st.textContent = '还没跑过'; }
+    const d = r.data;
+    if (!d) { box.innerHTML = '<div class="muted">还没有建议。点"跑一次校准"。</div>'; return; }
+    const rows = [];
+    for (const a of d.addSynonyms || []) {
+      rows.push('<div style="margin:4px 0">加同义词：<b>' + a.word + '</b> + 「' + a.variant + '」 ×' + a.count
+        + ' <button class="tiny" data-calib="add" data-word="' + a.word + '" data-variant="' + a.variant + '">采用</button></div>');
+    }
+    for (const a of d.removeSynonyms || []) {
+      rows.push('<div style="margin:4px 0">删同义词：<b>' + a.word + '</b> ×' + a.count
+        + ' <button class="tiny" data-calib="remove" data-word="' + a.word + '">采用</button></div>');
+    }
+    for (const a of d.repeats || []) {
+      rows.push('<div style="margin:4px 0;opacity:.8">同一段里出现 ' + a.times + ' 次：' + a.word + '（前面的都失败了）</div>');
+    }
+    box.innerHTML = rows.length ? rows.join('') : '<div class="muted">这次没有建议（说明现有词表够用）</div>';
+  } catch { /* ignore */ }
+}
+document.addEventListener('click', async (ev) => {
+  const btn = ev.target;
+  if (!btn || !btn.dataset || !btn.dataset.calib) return;
+  const body = { type: btn.dataset.calib, word: btn.dataset.word, variant: btn.dataset.variant || '' };
+  try {
+    const r = await api('/api/calibrate/adopt', body);
+    if (r && r.error) alert('失败：' + r.error);
+  } catch (e) { alert('失败：' + e.message); }
+  loadCalib();
+});
+document.addEventListener('change', async (ev) => {
+  if (ev.target && ev.target.id === 'calibEnabled') {
+    await api('/api/settings', { calibratorEnabled: ev.target.checked });
+    loadCalib();
+  }
+});
+document.addEventListener('change', (ev) => {
+  if (ev.target && ev.target.id === 'calibExpand') {
+    const body = document.getElementById('calibBody');
+    if (body) body.style.display = ev.target.checked ? 'block' : 'none';
+    if (ev.target.checked) loadCalib();
+  }
+});
+document.addEventListener('click', async (ev) => {
+  if (ev.target && ev.target.id === 'calibRunBtn') {
+    const r = await api('/api/calibrate/run', {});
+    if (r && r.error) alert(r.error);
+    loadCalib();
+  }
+});
+setTimeout(loadCalib, 1200);
+setInterval(() => { if (document.getElementById('calibPanel')) loadCalib(); }, 5000);
+
+// ---------------------------------------------------------------- 主循环
+function render(s) {
+  ui.lastState = s;
+  renderHeader(s);
+  renderPlans(s);
+  renderCapture(s);
+  renderEvents(s);
+  renderNewPlan();
+}
+
+async function refresh() {
+  try {
+    render(await api('/api/state'));
+  } catch {
+    $('status').textContent = '服务未连接';
+    $('led').className = 'led';
+  }
+}
+
+
+setInterval(refresh, 1000);
+loadSettings();
+refresh();
+</script>
+</body>
+</html>
+      

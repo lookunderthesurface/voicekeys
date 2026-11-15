@@ -1,0 +1,19 @@
+{
+  "name": "voicekeys",
+  "version": "0.1.0",
+  "private": true,
+  "description": "语音触发 + AI 组合安全原语（原型）",
+  "main": "src/cli.js",
+  "scripts": {
+    "start": "node app/server.js --port 19600 --open",
+    "selftest": "node test/selftest-all.cjs",
+    "ui-check": "node test/ui-ids.cjs",
+    "fixture": "node test/make-capture-fixture.cjs",
+    "release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "pinyin-pro": "^3.29.5",
+    "transcribe-cpp": "^0.4.2"
+  }
+}

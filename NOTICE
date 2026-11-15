@@ -1,0 +1,33 @@
+VoiceKeys — third-party notices
+
+本项目自身以 MIT 许可发布（见 LICENSE）。以下是运行时依赖与模型，各自的版权与许可归原作者所有。
+分发本项目（包括打包后的 exe）时，请连同本文件一起分发。
+
+## 推理与音频
+
+| 组件 | 许可 | 说明 |
+|---|---|---|
+| sherpa-onnx / sherpa-onnx-node | Apache-2.0 | 语音识别引擎（流式 ASR） |
+| onnxruntime | MIT | sherpa-onnx 的推理后端 |
+| @picovoice/pvrecorder-node | Apache-2.0 | 麦克风采集（Picovoice） |
+| transcribe-cpp / transcribe.cpp | MIT | 老师的推理库（高斯格式 GGUF 转写，作者 cjpais / handy-computer） |
+
+## 模型
+
+| 模型 | 许可 | 来源 |
+|---|---|---|
+| sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23 | Apache-2.0 | k2-fsa / sherpa-onnx releases（WenetSpeech 训练） |
+| Qwen3-ASR-0.6B (GGUF, Q8_0) | Apache-2.0 | Qwen Team, Alibaba Cloud；GGUF 转换由 handy-computer 提供 |
+
+模型**不随本项目分发**，由程序在首次使用时按需下载。分发时请保留原始作者的署名与链接。
+
+## 前端与工具
+
+| 组件 | 许可 |
+|---|---|
+| pinyin-pro | MIT |
+| Node.js | MIT |
+
+## 声明
+
+本项目不是 OpenAI、阿里巴巴、Picovoice、Handy 或 k2-fsa 的官方产品，也未获得它们的背书。

@@ -1,0 +1,98 @@
+{
+  "音量四十": {
+    "say": "音量四十",
+    "plan": {
+      "steps": [{ "op": "audio.volume.set", "percent": 40 }]
+    },
+    "pauseMs": 600,
+    "kind": "primary",
+    "aliasOf": "",
+    "thresholds": { "m1": null, "m2": null },
+    "model": "example",
+    "boundAt": "2026-11-16T00:00:00.000Z"
+  },
+  "暂停视频": {
+    "say": "暂停视频",
+    "plan": {
+      "steps": [{ "op": "media.toggle", "action": "pause" }]
+    },
+    "pauseMs": 600,
+    "kind": "primary",
+    "aliasOf": "",
+    "thresholds": { "m1": null, "m2": null },
+    "model": "example",
+    "boundAt": "2026-11-16T00:00:00.000Z"
+  },
+  "播放视频": {
+    "say": "播放视频",
+    "plan": {
+      "steps": [{ "op": "media.toggle", "action": "play" }]
+    },
+    "pauseMs": 600,
+    "kind": "primary",
+    "aliasOf": "",
+    "thresholds": { "m1": null, "m2": null },
+    "model": "example",
+    "boundAt": "2026-11-16T00:00:00.000Z"
+  },
+  "暂停播放": {
+    "say": "暂停播放",
+    "plan": {
+      "steps": [{ "op": "media.toggle", "action": "pause" }]
+    },
+    "pauseMs": 600,
+    "kind": "synonym",
+    "aliasOf": "暂停视频",
+    "thresholds": { "m1": null, "m2": null },
+    "model": "example",
+    "boundAt": "2026-11-16T00:00:00.000Z"
+  },
+  "静音": {
+    "say": "静音",
+    "plan": {
+      "steps": [{ "op": "audio.mute.toggle" }]
+    },
+    "pauseMs": 600,
+    "kind": "primary",
+    "aliasOf": "",
+    "thresholds": { "m1": null, "m2": null },
+    "model": "example",
+    "boundAt": "2026-11-16T00:00:00.000Z"
+  },
+  "发送": {
+    "say": "发送",
+    "plan": {
+      "steps": [{ "op": "key.press", "key": "enter" }]
+    },
+    "pauseMs": 600,
+    "kind": "primary",
+    "aliasOf": "",
+    "thresholds": { "m1": null, "m2": null },
+    "model": "example",
+    "boundAt": "2026-11-16T00:00:00.000Z"
+  },
+  "听我说": {
+    "say": "听我说",
+    "plan": {
+      "steps": [{ "op": "handy.set", "target": "on" }]
+    },
+    "pauseMs": 600,
+    "kind": "primary",
+    "aliasOf": "",
+    "thresholds": { "m1": null, "m2": null },
+    "model": "example",
+    "boundAt": "2026-11-16T00:00:00.000Z"
+  },
+  "我说完了": {
+    "say": "我说完了",
+    "plan": {
+      "steps": [{ "op": "handy.set", "target": "off" }]
+    },
+    "pauseMs": 600,
+    "kind": "primary",
+    "aliasOf": "",
+    "thresholds": { "m1": null, "m2": null },
+    "model": "example",
+    "boundAt": "2026-11-16T00:00:00.000Z"
+  }
+}

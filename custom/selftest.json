@@ -1,0 +1,7 @@
+﻿{
+  "id": "custom.selftest",
+  "desc": "自测用：往 %TEMP%\\vk-selftest.log 追加一行，验证 触发→执行 链路",
+  "params": {},
+  "exec": "selftest.cmd",
+  "timeoutMs": 3000
+}

@@ -1,0 +1,7 @@
+{
+  "id": "custom.say-hello",
+  "desc": "示例自定义动作：往 stdout 打印一句问候（演示 stdin JSON 入、stdout 出的契约）",
+  "params": { "name": "string" },
+  "exec": "say-hello.cmd",
+  "timeoutMs": 3000
+}

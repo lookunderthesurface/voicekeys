@@ -1,0 +1,12 @@
+node_modules/
+lib/node_modules/
+lib/*.tar.bz2
+plans.json
+*.log
+app/settings.json
+app/algorithms/.backup/
+app/algorithms/user/*.js
+!app/algorithms/user/.gitkeep
+capture/
+models/
+.DS_Store
