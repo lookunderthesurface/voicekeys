@@ -10,3 +10,4 @@ app/algorithms/user/*.js
 capture/
 models/
 .DS_Store
+dist/
