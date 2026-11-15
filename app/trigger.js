@@ -66,7 +66,8 @@ class Trigger {
       if (p.noisy) {
         this.onEvent({ type: 'drop', word: p.word, reason: 'kept talking' });
       } else {
-        this.onEvent({ type: 'fire', word: p.word });
+        // 这里只是静音门到期，还不是触发：M2 的裁决随后才到，可能是否决。
+        this.onEvent({ type: 'gate', word: p.word });
         try {
           if (this.wakeWords.has(p.word)) this.onWake(p.word);
           else if (this.endWords.has(p.word)) this.onEnd(p.word);

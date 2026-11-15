@@ -98,6 +98,7 @@ if (HANDY_WATCHDOG_MS > 0) {
 const config = require('./config.js');
 config.ensure();   // 首次运行在这里建好用户目录
 config.seedPlans();   // 空词表时塞一份示例，保证开箱可用
+setHandyPathFromSettings();
 const capture = new Capture(process.env.VK_CAPTURE_DIR || config.DIRS.capture);
 const candidate = new CandidateTracker();
 const confirmer = new Confirmer({ log });
@@ -266,6 +267,10 @@ function log(msg) {
 function pushEvent(evt) {
   state.events.unshift({ at: Date.now(), ...evt });
   state.events = state.events.slice(0, 12);
+  if (evt.type === 'gate') {
+    const gap = trigger && trigger.silenceBeforeFireMs != null ? ('，静音 ' + trigger.silenceBeforeFireMs + 'ms') : '';
+    log('门到期: ' + evt.word + gap + '（等确认模型裁决）');
+  }
   if (evt.type === 'fire') {
     const gap = trigger && trigger.silenceBeforeFireMs != null ? ('（说完后 ' + trigger.silenceBeforeFireMs + 'ms 执行）') : '';
     log('触发: ' + evt.word + gap);
@@ -300,6 +305,14 @@ function wordMetaMap() {
     map.set(p.say, p.thresholds || { m1: null, m2: null });
   }
   return map;
+}
+
+/** 设置里配了 handyPath 就通过环境变量交给 lib/runtime/listener/handy.cjs */
+function setHandyPathFromSettings() {
+  try {
+    const s = require('./providers.js').load();
+    if (s && typeof s.handyPath === 'string' && s.handyPath) process.env.HANDY_EXE = s.handyPath;
+  } catch { /* ignore */ }
 }
 
 function rebuildSpotter() {
@@ -639,6 +652,7 @@ async function fireWord(word) {
     return;
   }
   word = decided.word;
+  pushEvent({ type: 'fire', word });
 
   const entry = planner.lookup(word);
   if (!entry) {
@@ -892,7 +906,7 @@ const server = http.createServer(async (req, res) => {
       if (typeof body.deepseekKey === 'string' && body.deepseekKey.includes('****')) delete body.deepseekKey;
       providers.save(body);
       // 采集上限/开关改了要立刻生效（capture 只在 reload 时读设置）
-      try { capture.reload(); rebuildSpotter(); } catch { /* ignore */ }
+      try { capture.reload(); rebuildSpotter(); setHandyPathFromSettings(); } catch { /* ignore */ }
       return json(res, 200, { ok: true, settings: providers.publicView() });
     }
     if (p === '/api/ollama/status') {

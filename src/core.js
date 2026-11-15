@@ -165,7 +165,21 @@ const PRIMITIVES = [
       const found = await ctx.call({ op: 'window.find', match: pattern }, 4000);
       if (!found || !found.ok) return { ok: false, error: 'no player window matched', pattern };
 
-      const act = await ctx.call({ op: 'window.activate', hwnd: found.hwnd }, 4000);
+      let act = await ctx.call({ op: 'window.activate', hwnd: found.hwnd }, 4000);
+      // Windows 会拒绝后台进程切前台（SetForegroundWindow 受限）。没切过去还按空格的话，
+      // 空格会打到"当前前台"窗口——用户遇到的就是这个（说暂停视频却动了 DSH）。
+      if (!act || act.foreground !== found.hwnd) {
+        await ctx.call({ op: 'wait', ms: 120 });
+        act = await ctx.call({ op: 'window.activate', hwnd: found.hwnd }, 4000);
+      }
+      if (!act || act.foreground !== found.hwnd) {
+        return {
+          ok: false,
+          error: '无法把播放器切到前台，已取消按键（避免空格打到别的窗口）',
+          window: found.title,
+          foreground: act ? act.foreground : 0,
+        };
+      }
       await ctx.call({ op: 'key.press', key: 'space' });
       await ctx.call({ op: 'wait', ms: 50 });
 
@@ -197,8 +211,9 @@ const PRIMITIVES = [
     risk: 'safe',
     async run(p) {
       const path = require('node:path');
-      const plugin = process.env.VOICE_PLUGIN_DIR || path.resolve(__dirname, '..', '..', 'voice-plugin');
-      const handy = require(path.join(plugin, 'runtime', 'listener', 'handy.cjs'));
+      // 走应用自带 lib（app/paths.js 解析）；旧代码硬编码 ../../voice-plugin，自包含改造后那个目录不存在了
+      const paths = require('../app/paths.js');
+      const handy = require(path.join(paths.pluginRoot(), 'runtime', 'listener', 'handy.cjs'));
       const busy = handy.isRecording();
       const want = p.target === 'toggle' ? !busy : p.target === 'on';
       if (busy === want) {
