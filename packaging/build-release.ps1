@@ -19,7 +19,6 @@ $csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 Write-Host '== 1/6 清理 ==' -ForegroundColor Cyan
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $out 'runtime') -Force | Out-Null
 
 Write-Host '== 2/6 复制代码 ==' -ForegroundColor Cyan
 foreach ($d in @('app','src','scripts','examples','docs','test','runtime')) {
@@ -31,6 +30,12 @@ foreach ($f in @('README.md','LICENSE','NOTICE','start.cmd','package.json')) {
   if (Test-Path $src) { Copy-Item $src (Join-Path $out $f) -Force }
 }
 
+# 防呆：Copy-Item -Recurse 到已存在目录会再嵌一层
+$nested = Join-Path $out 'runtime\runtime'
+if (Test-Path $nested) {
+  Get-ChildItem $nested -Force | ForEach-Object { Move-Item $_.FullName (Join-Path $out 'runtime') -Force }
+  Remove-Item $nested -Recurse -Force
+}
 Write-Host '== 3/6 复制运行时依赖 ==' -ForegroundColor Cyan
 Copy-Item $node (Join-Path $out 'runtime\node.exe') -Force
 Copy-Item (Join-Path $root 'lib') (Join-Path $out 'lib') -Recurse -Force

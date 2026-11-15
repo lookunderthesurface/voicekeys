@@ -1,4 +1,4 @@
-// VoiceKeys 启动器（.NET Framework 自带 csc 编译，不需要额外工具链）
+﻿// VoiceKeys 启动器（.NET Framework 自带 csc 编译，不需要额外工具链）
 //
 // 为什么要有它：用户下载 zip 解压后双击一个 exe 就能用，不需要装 Node、不弹黑框。
 // 它做的事：① 如果 19600 已经在监听 → 直接开浏览器；② 否则静默拉起 runtime\node.exe app\server.js，
@@ -76,6 +76,9 @@ class VoiceKeysLauncher
         psi.CreateNoWindow = true;
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError = true;
+        // Node 输出 UTF-8；不指定的话 .NET 会按系统 ANSI 解，中文全成乱码
+        psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
+        psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
 
         var proc = new Process();
         proc.StartInfo = psi;
