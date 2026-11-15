@@ -97,6 +97,7 @@ if (HANDY_WATCHDOG_MS > 0) {
 
 const config = require('./config.js');
 config.ensure();   // 首次运行在这里建好用户目录
+config.seedPlans();   // 空词表时塞一份示例，保证开箱可用
 const capture = new Capture(process.env.VK_CAPTURE_DIR || config.DIRS.capture);
 const candidate = new CandidateTracker();
 const confirmer = new Confirmer({ log });

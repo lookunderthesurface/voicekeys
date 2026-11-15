@@ -89,7 +89,25 @@ function ensure() {
   if (!fs.existsSync(FILES.plans)) {
     fs.writeFileSync(FILES.plans, '{}\n', 'utf8');
   }
+  seedPlans();
   return { root: ROOT, created, migratedFrom };
 }
 
-module.exports = { ROOT, DIRS, FILES, ensure, DEFAULT_ROOT, APP_ROOT };
+
+/**
+ * 首次运行时塞一份示例词表，让用户一打开就有能用的词。
+ * 只在他自己还没绑过任何词的时候做（plans.json 是 {} 或不存在）。
+ */
+function seedPlans() {
+  try {
+    const raw = fs.existsSync(FILES.plans) ? fs.readFileSync(FILES.plans, 'utf8').trim() : '';
+    const has = raw && raw !== '{}' && Object.keys(JSON.parse(raw)).length > 0;
+    if (has) return false;
+    const sample = path.join(APP_ROOT, 'examples', 'plans.example.json');
+    if (!fs.existsSync(sample)) return false;
+    fs.copyFileSync(sample, FILES.plans);
+    return true;
+  } catch { return false; }
+}
+
+module.exports = { ROOT, DIRS, FILES, ensure, seedPlans, DEFAULT_ROOT, APP_ROOT };
