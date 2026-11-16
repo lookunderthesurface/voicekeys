@@ -153,10 +153,9 @@ class Capture {
    * @param {string} d.path         'fast' | 'm2'
    */
   recordDecision(d) {
-    // 用户要的是 5 秒素材（触发前 4 秒 + 触发后 1 秒）。
-    // 之前这里是 4000，实际只存了 4 秒，段尾经常被截掉 ——
-    // 多遍录音里"最后一段后面 0.00s 音频"就是这么来的。
-    const MAX_DECISION_MS = 5000;
+    // 用户 2026-11-16：素材改成 6 秒 = 触发前 5 秒 + 触发后 1 秒。
+    // 后 1 秒的用途：观察"正常静音段"长什么样（也顺便给 M1 留出吐完最后一个字的尾巴）。
+    const MAX_DECISION_MS = 6000;
     if (!d || !d.audio || !d.audio.length) return { saved: false, why: 'no-audio' };
     if (d.audio.length < 3200) return { saved: false, why: 'too-short' };
 

@@ -115,7 +115,7 @@ function captureAfterFire(word, extra) {
     try {
       if (capture.full) autoCleanCapture();
       capture.recordDecision({
-        audio: recentAudio(5000),
+        audio: recentAudio(6000),
         word,
         ...extra,
       });
@@ -123,7 +123,7 @@ function captureAfterFire(word, extra) {
   }, CAPTURE_TAIL_MS);
   t.unref?.();
 }
-const AUDIO_RING_FRAMES = 60;          // 60 × 100ms = 6 秒
+const AUDIO_RING_FRAMES = 70;          // 70 × 100ms = 7 秒（6 秒素材 + 触发后 1 秒的余量）
 const AUDIO_RING = [];
 const AUDIO_RMS = [];       // 与 AUDIO_RING 对齐的音量历史
 const AUDIO_RING_AT = [];   // 与 AUDIO_RING 对齐的墙钟时间戳（ms）
