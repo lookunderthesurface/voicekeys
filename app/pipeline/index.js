@@ -108,7 +108,12 @@ class Pipeline {
             ms: out.ms || null,
           };
         }
-      } catch { /* M2 掉了就退化到 M1 */ }
+      } catch (e) {
+        // 不能静默吞：曾经因为 deps.m1 少传 findWord，这里抛错被吞掉，
+        // 表现是"M2 无结果"，查了很久才定位。现在记下来。
+        if (this.deps.log) this.deps.log('M2 裁决出错: ' + (e && e.message));
+        else console.error('[pipeline] M2 裁决出错: ' + (e && e.message));
+      }
     }
 
     const verdict = policy.decide({

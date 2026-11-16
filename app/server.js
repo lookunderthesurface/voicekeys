@@ -23,7 +23,7 @@ const store = require('../src/store.js');
 const { Executor } = require('./executor.js');
 const { Trigger } = require('./trigger.js');
 const algo = require('./algorithms');
-const { match: matchOne, matchAtEnd, bestScore } = algo.matcher;
+const { match: matchOne, matchAtEnd, bestScore, findWord } = algo.matcher;
 const { CandidateTracker } = require('./candidate.js');
 const { Confirmer } = require('./confirmer.js');
 const { Pipeline } = require('./pipeline');
@@ -225,9 +225,11 @@ function recentAudio(maxMs = 5000) {
 }
 
 const pipeline = new Pipeline({
-  m1: { matchAtEnd, bestScore },
+  // 注意：这里必须把 pipeline 用到的匹配函数都传全，少一个就会在运行时静默抛错
+  m1: { matchAtEnd, bestScore, matchOne, findWord },
   m2: { confirm: (audio) => confirmer.confirm(audio, 3000) },
   capture,
+  log: (m) => log(m),
   audio: () => recentAudio(2500),   // 给 M2 的窗口：2.5 秒足够包含当前这个词
   words: () => state.words.map((w) => ({ word: w.word, planKey: w.planKey })),
   // 唤醒/结束词集合：策略用它禁止"把唤醒词改判成结束词"这类错动作
@@ -515,8 +517,9 @@ function handleAsrMessage(msg) {
     }
   }
   candidate.update(state.asrText, { word: cand.word, score: cand.score, how: cand.how });
-  state.lastWordFireAt = state.lastWordFireAt || {};
-  if (Date.now() - (state.lastWordFireAt[cand.word] || 0) >= 2500) {
+  // 用户 2026-11-16 明确：不需要"同一个词 2.5 秒内不重复"的去重
+  // （他要是 2.5 秒内说两遍，那是他自己的事，不该被程序拦住）
+  {
     if (!(trigger && trigger.pending)) {
       if (trigger) trigger.queue(cand.word);
       log('门开始计时：M2 已加载 ' + (m2PreloadAt ? (Date.now() - m2PreloadAt) : 0) + 'ms' + (m2PreloadAt ? '' : '（未预热）'));
