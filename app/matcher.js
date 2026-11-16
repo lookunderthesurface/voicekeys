@@ -202,4 +202,35 @@ function findWord(text, words, opts = {}) {
   return { word: top.word, planKey: top.planKey, score: top.score, how: top.how };
 }
 
-module.exports = { matchOne, matchAtEnd, bestScore, scoreAgainst, normalize, toPinyin, similarity, editDistance, findWord };
+
+/**
+ * 对**所有**关键词打分（滑窗取每个词的最高分），按分数从高到低排序。
+ * 用途：判断"是不是词""够不够自信""有没有第二个词也很像"。
+ * @returns {Array<{word, score, how}>}
+ */
+function scoreAll(text, words) {
+  const t = normalize(text);
+  if (!t) return [];
+  const out = [];
+  for (const item of words) {
+    const w = normalize(item.word);
+    if (!w) continue;
+    let best = 0;
+    let how = 'none';
+    for (let len = Math.max(1, w.length - 1); len <= w.length + 1; len += 1) {
+      if (len > t.length) break;
+      for (let i = 0; i + len <= t.length; i += 1) {
+        const chunk = t.slice(i, i + len);
+        const charSim = similarity(chunk.split(''), w.split(''));
+        const pySim = similarity(toPinyin(chunk), toPinyin(w));
+        const score = Math.max(charSim, pySim);
+        if (score > best) { best = score; how = pySim >= charSim ? 'pinyin-window' : 'char-window'; }
+      }
+    }
+    if (best > 0) out.push({ word: item.word, planKey: item.planKey || item.word, score: best, how });
+  }
+  out.sort((a, b) => b.score - a.score);
+  return out;
+}
+
+module.exports = { matchOne, matchAtEnd, bestScore, scoreAgainst, normalize, toPinyin, similarity, editDistance, findWord, scoreAll };

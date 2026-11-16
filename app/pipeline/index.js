@@ -21,6 +21,15 @@ class Pipeline {
    * 端尾匹配成功、或最高分过了"候选底线"，都算候选。
    */
   propose(text, { threshold, words, voicedMs = 0, wordMeta }) {
+    // 领先幅度：给所有词打分，看第一名比第二名高多少（用户 2026-11-16 的方案）
+    const marginOf = (txt) => {
+      try {
+        if (typeof this.deps.m1.scoreAll !== 'function') return null;
+        const s = this.deps.m1.scoreAll(txt, (words || []).map((w) => ({ word: w.word, planKey: w.planKey })));
+        if (!s.length) return null;
+        return { best: s[0].score, second: s.length > 1 ? s[1].score : 0, margin: s[0].score - (s.length > 1 ? s[1].score : 0) };
+      } catch { return null; }
+    };
     // 每词阈值：没单独设就用全局默认（见 app/server.js 的 wordMeta 构造）
     const m1Of = (w) => {
       const m = wordMeta && wordMeta.get ? wordMeta.get(w) : null;
@@ -31,12 +40,15 @@ class Pipeline {
 
     const endMatch = this.deps.m1.matchAtEnd(text, list, { threshold });
     if (endMatch && !endMatch.ambiguous && endMatch.score >= m1Of(endMatch.word)) {
+      const mAnchor = marginOf(text);
       return {
         word: endMatch.word,
         score: endMatch.score,
         how: endMatch.how,
         degraded: endMatch.how !== 'exact',
         source: 'end-anchored',
+        margin: mAnchor ? mAnchor.margin : null,
+        second: mAnchor ? mAnchor.second : null,
       };
     }
 
@@ -44,12 +56,15 @@ class Pipeline {
     const verdict = policy.shouldPropose(best, { threshold });
     if (!verdict.propose) return null;   // M1 判"否" → 直接丢，不打扰 M2
 
+    const mLoose = marginOf(text);
     return {
       word: best.word,
       score: best.score,
       how: best.how || 'loose',
       degraded: true,
       source: 'loose-screen',
+      margin: mLoose ? mLoose.margin : null,
+      second: mLoose ? mLoose.second : null,
       note: verdict.reason,
     };
   }
@@ -96,27 +111,30 @@ class Pipeline {
           if (wordMeta && typeof wordMeta.forEach === 'function') {
             wordMeta.forEach((m) => { if (m && typeof m.m2 === 'number' && m.m2 < minM2) minM2 = m.m2; });
           }
-          // 先算"候选词自己"在这句转写里的分数（滑窗），够阈值就认它；
-          // 只有它不够、且别的词明显更强时才允许改判——
-          // 否则会出现"用户说「我说完了」，M2 却判定成「听我说」并执行"（日志 11:39:42）。
-          const own = m2MatchOf(out.text, [{ word: candidate.word, planKey: candidate.word }], 0);
-          const ownScore = own ? own.score : 0;
-          const best = m2MatchOf(out.text, list, minM2);
-          let m2Word = null;
-          if (ownScore >= m2ThresholdOf(candidate.word)) {
-            m2Word = candidate.word;
-          } else if (best && !best.ambiguous && best.word !== candidate.word
-                     && best.score >= m2ThresholdOf(best.word) && best.score > ownScore + 0.1) {
-            m2Word = best.word;
+          // ===== 用户的方案（2026-11-16）：对 M2 转写给所有词打分，用"最高分 + 领先幅度"判断 =====
+          const scored = (typeof this.deps.m1.scoreAll === 'function')
+            ? this.deps.m1.scoreAll(out.text || '', list)
+            : (() => { const b = m2MatchOf(out.text, list, 0); return b ? [{ word: b.word, score: b.score }] : []; })();
+          const top1 = scored[0] || { word: null, score: 0 };
+          const candScore = (scored.find((x) => x.word === candidate.word) || { score: 0 }).score;
+          const nearWordScore = (this.deps.policy || policy.DEFAULT_POLICY).nearWordScore;
+          const m2Floor = (this.deps.policy || policy.DEFAULT_POLICY).m2Floor;
+
+          if (top1.score < m2Floor) {
+            // 最高分都这么低：自信"这不是任何关键词"
+            m2 = { usable: true, text: out.text || '', word: null, ms: out.ms || null, top1: top1.word, top1Score: top1.score, candScore, note: 'M2 最高分太低，判否' };
+          } else if (top1.word === candidate.word) {
+            m2 = { usable: true, text: out.text || '', word: candidate.word, ms: out.ms || null, top1: top1.word, top1Score: top1.score, candScore, note: 'M2 认同候选词' };
+          } else if (candScore >= nearWordScore) {
+            // M2 听成了近音词，但对候选词仍有分 → 听 M1 的（M1 够自信就认，否则丢弃）
+            const m1Self = candidate.score >= m2ThresholdOf(candidate.word);
+            m2 = { usable: true, text: out.text || '', word: m1Self ? candidate.word : null, ms: out.ms || null,
+                   top1: top1.word, top1Score: top1.score, candScore,
+                   note: 'M2 听成近音词「' + top1.word + '」，候选词仍有 ' + candScore.toFixed(2) + (m1Self ? '，听 M1 的' : '，M1 也不够自信，丢弃') };
+          } else {
+            // M2 听到的是别的内容：按 M2 的决定（改判或否决）
+            m2 = { usable: true, text: out.text || '', word: top1.word, ms: out.ms || null, top1: top1.word, top1Score: top1.score, candScore, note: 'M2 判定为「' + top1.word + '」' };
           }
-          m2 = {
-            usable: true,
-            text: out.text || '',
-            word: m2Word,
-            ms: out.ms || null,
-            ownScore,
-            bestScore: best && !best.ambiguous ? best.score : null,
-          };
         }
       } catch (e) {
         // 不能静默吞：曾经因为 deps.m1 少传 findWord，这里抛错被吞掉，

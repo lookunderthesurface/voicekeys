@@ -11,6 +11,7 @@ module.exports = {
   match: core.matchOne,
   matchAtEnd: core.matchAtEnd,   // 只认"整句话以它结尾"的词（挡掉一句话里的半句）
   findWord: core.findWord,       // 在整句里滑窗找关键词（给 M2 的整句转写用）
+  scoreAll: core.scoreAll,       // 对所有词打分并排序（判断"有没有第二名的干扰"）
   bestScore: core.bestScore,
   // 以下不是契约要求，但别的算法可能复用
   scoreAgainst: core.scoreAgainst,

@@ -23,7 +23,7 @@ const store = require('../src/store.js');
 const { Executor } = require('./executor.js');
 const { Trigger } = require('./trigger.js');
 const algo = require('./algorithms');
-const { match: matchOne, matchAtEnd, bestScore, findWord } = algo.matcher;
+const { match: matchOne, matchAtEnd, bestScore, findWord, scoreAll } = algo.matcher;
 const { CandidateTracker } = require('./candidate.js');
 const { Confirmer } = require('./confirmer.js');
 const { Pipeline } = require('./pipeline');
@@ -226,7 +226,7 @@ function recentAudio(maxMs = 5000) {
 
 const pipeline = new Pipeline({
   // 注意：这里必须把 pipeline 用到的匹配函数都传全，少一个就会在运行时静默抛错
-  m1: { matchAtEnd, bestScore, matchOne, findWord },
+  m1: { matchAtEnd, bestScore, matchOne, findWord, scoreAll },
   m2: { confirm: (audio) => confirmer.confirm(audio, 3000) },
   capture,
   log: (m) => log(m),
@@ -506,10 +506,10 @@ function handleAsrMessage(msg) {
     const planEntry = cand.word ? planner.lookup(cand.word) : null;
     const candIsHandy = Boolean(planEntry && planEntry.plan && Array.isArray(planEntry.plan.steps)
       && planEntry.plan.steps.some((s) => s.op === 'handy.set'));
-    const fast = pipeline.policy.shouldFastPath({ score: cand.score, isHandy: candIsHandy, voicedMs });
+    const fast = pipeline.policy.shouldFastPath({ score: cand.score, margin: cand.margin, isHandy: candIsHandy, voicedMs });
     if (fast) {
       state.pendingConfirm = { word: cand.word, candidate: cand, fast: true, audio: null, promise: null };
-      log('快速通道: ' + cand.word + '（M1 ' + cand.score.toFixed(2) + '，跳过 M2）');
+      log('快速通道: ' + cand.word + '（M1 ' + cand.score.toFixed(2) + '，领先 ' + (cand.margin == null ? '?' : cand.margin.toFixed(2)) + '，跳过 M2）');
     } else {
       const h = pipeline.startConfirm();
       if (process.env.VK_DEBUG_AUDIO) log('[dbg] 候选 ' + cand.word + ' 音频 ' + (h.audio ? (h.audio.length / 16000).toFixed(2) : 'null') + 's promise=' + Boolean(h.promise));

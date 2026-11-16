@@ -15,11 +15,17 @@
 //      —— 防止把「播完了」这种噪声当成"停止"
 
 const DEFAULT_POLICY = {
-  candidateFloor: 0.15,   // 实测扫描：0.15 比 0.35 多 3 个点召回，M2 调用 +11%，零误判词
-  fastPathThreshold: 0.95, // M1 端尾匹配达到这个分数就自己判，不叫 M2
+  candidateFloor: 0.15,        // 低于这个分：连候选都不提（"自信认为不是任何词"的下界）
+  fastPathThreshold: 0.95,     // 最高分要达到这个才可能走快速通道
+  fastPathMargin: 0.15,        // 且要领先第二名这么多，才算"自信"（用户 2026-11-16 定）
   dualAgreementBelow: 0.95,
   handyWordsAuthoritative: true,
   degradedRequiresAgreement: true,
+  // M2 侧：候选词在 M2 转写里的分数 >= 这个值 → 认为 M2 只是"听成近音词"，
+  // 这时听 M1 的；低于它 → 认为 M2 听到的是无关内容，否决。
+  nearWordScore: 0.45,
+  // M2 侧：最高分低于这个 → 自信认为"不是任何词"
+  m2Floor: 0.45,
 };
 
 /**
@@ -114,6 +120,9 @@ function decide(input) {
 function shouldFastPath(input) {
   const policy = { ...DEFAULT_POLICY, ...(input.policy || {}) };
   if (!input || typeof input.score !== 'number') return false;
-  return input.score >= policy.fastPathThreshold;
+  if (input.score < policy.fastPathThreshold) return false;
+  // 用户要求：最高分很高但"第二名也很高"时不能自信，要交给 M2
+  if (typeof input.margin === 'number' && input.margin < policy.fastPathMargin) return false;
+  return true;
 }
 module.exports = { decide, shouldPropose, shouldFastPath, DEFAULT_POLICY };
