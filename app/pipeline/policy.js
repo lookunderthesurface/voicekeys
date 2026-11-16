@@ -125,4 +125,64 @@ function shouldFastPath(input) {
   if (typeof input.margin === 'number' && input.margin < policy.fastPathMargin) return false;
   return true;
 }
-module.exports = { decide, shouldPropose, shouldFastPath, DEFAULT_POLICY };
+
+/** 两个词是否共享 ≥ minLen 字的连续片段（"听我说"/"我说完了" 共享"我说"） */
+function sharesRun(a, b, minLen = 2) {
+  const x = String(a || '');
+  const y = String(b || '');
+  for (let i = 0; i + minLen <= x.length; i += 1) {
+    if (y.includes(x.slice(i, i + minLen))) return true;
+  }
+  return false;
+}
+
+/**
+ * 由"所有关键词的分数"得出最终裁决（纯函数，便于离线 A/B）。
+ * @param {object} input
+ * @param {string} input.candidate       M1 提出的词
+ * @param {number} input.m1Score         M1 对该词的分数
+ * @param {Array}  input.scored          [{word, score}] 已降序
+ * @param {Function} input.thresholdOf   该词的 M2 阈值 (word) => number
+ * @param {object} [input.policy]
+ * @returns {{action:'fire'|'swap'|'drop', word?:string, why:string, rule:string}}
+ */
+function verdictFromScores(input) {
+  const p = { ...DEFAULT_POLICY, ...(input.policy || {}) };
+  const scored = Array.isArray(input.scored) ? input.scored : [];
+  const top1 = scored[0] || { word: null, score: 0 };
+  const cand = input.candidate;
+  const candScore = (scored.find((x) => x.word === cand) || { score: 0 }).score;
+  const th = typeof input.thresholdOf === 'function' ? input.thresholdOf : () => p.m2Floor;
+
+  if (top1.score < p.m2Floor) {
+    return { action: 'drop', why: 'M2 最高分太低（' + top1.score.toFixed(2) + '）', rule: 'm2-floor' };
+  }
+  if (top1.word === cand && top1.score >= th(cand)) {
+    return { action: 'fire', word: cand, why: 'M2 认同候选词（' + top1.score.toFixed(2) + '）', rule: 'm2-agree' };
+  }
+  if (top1.word === cand) {
+    // M2 听到的就是候选词，但分数没过阈值 → 证据不足，丢弃（不能当"近音"，更不能改判到自己）
+    return { action: 'drop', rule: 'm2-weak-same-word',
+      why: 'M2 听到候选词但分数不够（' + top1.score.toFixed(2) + ' < ' + th(cand).toFixed(2) + '）' };
+  }
+
+  // top1 就是候选词但没过阈值 → 属于"M2 听得弱"，不是"听成近音词"，不能走这条
+  const isPartner = top1.word && top1.word !== cand && sharesRun(cand, top1.word, 2);
+  if (isPartner && candScore >= p.nearWordScore) {
+    if (input.m1Score >= th(cand)) {
+      return { action: 'fire', word: cand, rule: 'm2-confused-m1-decides',
+        why: 'M2 听成近音词「' + top1.word + '」，候选词仍有 ' + candScore.toFixed(2) + '，听 M1 的（M1 ' + input.m1Score.toFixed(2) + '）' };
+    }
+    return { action: 'drop', rule: 'm2-confused-m1-unsure',
+      why: 'M2 听成近音词「' + top1.word + '」，M1 也不够自信（' + input.m1Score.toFixed(2) + '）' };
+  }
+  if (top1.score < th(top1.word)) {
+    // M2 说的"别的词"也没有足够把握 → 不当成改判依据
+    return { action: 'drop', rule: 'm2-weak-other',
+      why: 'M2 听到「' + top1.word + '」但分数不够（' + top1.score.toFixed(2) + '）' };
+  }
+  return { action: 'swap', word: top1.word, rule: 'm2-decides',
+    why: 'M2 判定为「' + top1.word + '」（候选「' + cand + '」）' };
+}
+
+module.exports = { decide, shouldPropose, shouldFastPath, verdictFromScores, sharesRun, DEFAULT_POLICY };

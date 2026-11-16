@@ -99,6 +99,7 @@ class Pipeline {
       return text ? fn.call(this.deps.m1, text, list, { threshold: minThreshold }) : null;
     };
 
+    let v = null;   // verdictFromScores 的结论（M2 无结果时保持 null）
     let m2 = { usable: false, word: null, text: '', ms: null };
     if (handle && handle.promise) {
       try {
@@ -111,30 +112,26 @@ class Pipeline {
           if (wordMeta && typeof wordMeta.forEach === 'function') {
             wordMeta.forEach((m) => { if (m && typeof m.m2 === 'number' && m.m2 < minM2) minM2 = m.m2; });
           }
-          // ===== 用户的方案（2026-11-16）：对 M2 转写给所有词打分，用"最高分 + 领先幅度"判断 =====
+          // 裁决逻辑统一放在 policy.verdictFromScores（纯函数）：
+          // 运行时和离线 A/B 用同一份代码，避免"测的和跑的不一样"。
           const scored = (typeof this.deps.m1.scoreAll === 'function')
             ? this.deps.m1.scoreAll(out.text || '', list)
             : (() => { const b = m2MatchOf(out.text, list, 0); return b ? [{ word: b.word, score: b.score }] : []; })();
-          const top1 = scored[0] || { word: null, score: 0 };
-          const candScore = (scored.find((x) => x.word === candidate.word) || { score: 0 }).score;
-          const nearWordScore = (this.deps.policy || policy.DEFAULT_POLICY).nearWordScore;
-          const m2Floor = (this.deps.policy || policy.DEFAULT_POLICY).m2Floor;
-
-          if (top1.score < m2Floor) {
-            // 最高分都这么低：自信"这不是任何关键词"
-            m2 = { usable: true, text: out.text || '', word: null, ms: out.ms || null, top1: top1.word, top1Score: top1.score, candScore, note: 'M2 最高分太低，判否' };
-          } else if (top1.word === candidate.word) {
-            m2 = { usable: true, text: out.text || '', word: candidate.word, ms: out.ms || null, top1: top1.word, top1Score: top1.score, candScore, note: 'M2 认同候选词' };
-          } else if (candScore >= nearWordScore) {
-            // M2 听成了近音词，但对候选词仍有分 → 听 M1 的（M1 够自信就认，否则丢弃）
-            const m1Self = candidate.score >= m2ThresholdOf(candidate.word);
-            m2 = { usable: true, text: out.text || '', word: m1Self ? candidate.word : null, ms: out.ms || null,
-                   top1: top1.word, top1Score: top1.score, candScore,
-                   note: 'M2 听成近音词「' + top1.word + '」，候选词仍有 ' + candScore.toFixed(2) + (m1Self ? '，听 M1 的' : '，M1 也不够自信，丢弃') };
-          } else {
-            // M2 听到的是别的内容：按 M2 的决定（改判或否决）
-            m2 = { usable: true, text: out.text || '', word: top1.word, ms: out.ms || null, top1: top1.word, top1Score: top1.score, candScore, note: 'M2 判定为「' + top1.word + '」' };
-          }
+          v = policy.verdictFromScores({
+            candidate: candidate.word,
+            m1Score: candidate.score,
+            scored,
+            thresholdOf: (w) => m2ThresholdOf(w),
+          });
+          m2 = {
+            usable: true,
+            text: out.text || '',
+            word: v.action === 'fire' || v.action === 'swap' ? v.word : null,
+            ms: out.ms || null,
+            decision: v,
+            top1: scored[0] ? scored[0].word : null,
+            top1Score: scored[0] ? scored[0].score : 0,
+          };
         }
       } catch (e) {
         // 不能静默吞：曾经因为 deps.m1 少传 findWord，这里抛错被吞掉，
@@ -144,17 +141,17 @@ class Pipeline {
       }
     }
 
-    const verdict = policy.decide({
-      word: candidate.word,
-      m1Score: candidate.score,
-      m1How: candidate.how,
-      m2Word: m2.word,
-      m2Text: m2.text,
-      m2Usable: m2.usable,
-      isHandy,
-      handyWords: this.deps.handyWords ? this.deps.handyWords() : null,
-      threshold,
-    });
+    // 有 M2 结论就直接用（verdictFromScores 已是完整策略：近音词听 M1、弱证据丢弃等闸门）
+    let verdict;
+    if (v) {
+      verdict = { action: v.action, word: v.word, reason: v.why, rule: v.rule };
+    } else {
+      // M2 没给结果（超时/出错/根本没候选）→ 只有 M1 够自信才执行
+      const p = this.deps.policy || policy.DEFAULT_POLICY;
+      verdict = candidate.score >= p.dualAgreementBelow
+        ? { action: 'fire', word: candidate.word, reason: 'M2 无结果，但 M1 置信度高', rule: 'm1-confident' }
+        : { action: 'drop', reason: 'M2 无结果且 M1 置信度不足', rule: 'no-evidence' };
+    }
 
 
     this.last = { at: Date.now(), candidate, m2, verdict };

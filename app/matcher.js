@@ -181,7 +181,8 @@ function findWord(text, words, opts = {}) {
     if (!w) continue;
     let best = { score: 0, how: 'none' };
     // 窗口长度在关键词长度 ±1 之间滑动：容忍多字/缺字
-    for (let len = Math.max(1, w.length - 1); len <= w.length + 1; len += 1) {
+    const minLenF = w.length <= 2 ? Math.max(1, w.length) : w.length - 1;
+    for (let len = minLenF; len <= w.length + 1; len += 1) {
       if (len > t.length) break;
       for (let i = 0; i + len <= t.length; i += 1) {
         const chunk = t.slice(i, i + len);
@@ -217,7 +218,10 @@ function scoreAll(text, words) {
     if (!w) continue;
     let best = 0;
     let how = 'none';
-    for (let len = Math.max(1, w.length - 1); len <= w.length + 1; len += 1) {
+    // 窗口下限设为 2（除非关键词本身只有 1 个字）：
+    // 否则两字词会拿单个汉字去比，同音字（京/静）就能刷出高分，误判成"认同"。
+    const minLen = w.length <= 2 ? Math.max(1, w.length) : w.length - 1;
+    for (let len = minLen; len <= w.length + 1; len += 1) {
       if (len > t.length) break;
       for (let i = 0; i + len <= t.length; i += 1) {
         const chunk = t.slice(i, i + len);

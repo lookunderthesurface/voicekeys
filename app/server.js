@@ -23,7 +23,7 @@ const store = require('../src/store.js');
 const { Executor } = require('./executor.js');
 const { Trigger } = require('./trigger.js');
 const algo = require('./algorithms');
-const { match: matchOne, matchAtEnd, bestScore, findWord, scoreAll } = algo.matcher;
+const { match: matchOne, matchAtEnd, bestScore, findWord, scoreAll, scoreAgainst } = algo.matcher;
 const { CandidateTracker } = require('./candidate.js');
 const { Confirmer } = require('./confirmer.js');
 const { Pipeline } = require('./pipeline');
@@ -226,7 +226,7 @@ function recentAudio(maxMs = 5000) {
 
 const pipeline = new Pipeline({
   // 注意：这里必须把 pipeline 用到的匹配函数都传全，少一个就会在运行时静默抛错
-  m1: { matchAtEnd, bestScore, matchOne, findWord, scoreAll },
+  m1: { matchAtEnd, bestScore, matchOne, findWord, scoreAll, scoreAgainst },
   m2: { confirm: (audio) => confirmer.confirm(audio, 3000) },
   capture,
   log: (m) => log(m),
