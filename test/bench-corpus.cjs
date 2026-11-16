@@ -111,6 +111,8 @@ function runOne(pcm) {
   const limitIdx = process.argv.indexOf('--limit');
   const limit = limitIdx > 0 ? Number(process.argv[limitIdx + 1]) : 0;
   const useTeacher = process.argv.includes('--teacher');
+  const expectIdx = process.argv.indexOf('--expect');
+  const expectWord = expectIdx > 0 ? String(process.argv[expectIdx + 1] || '') : '';
   if (!dir || !fs.existsSync(dir)) { console.log('用法: node test/bench-corpus.cjs <wav目录> [--limit N] [--teacher]'); process.exit(1); }
   let files = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.wav')).sort();
   if (limit) files = files.slice(0, limit);
@@ -120,10 +122,17 @@ function runOne(pcm) {
   let secs = 0;
   let triggers = 0;
   let fires = 0;
+  let skipped = 0;
   const hits = [];
   for (let k = 0; k < files.length; k += 1) {
-    const wav = readWav(path.join(dir, files[k]));
-    const pcm = wav.samples || wav;
+    let pcm;
+    try {
+      const wav = readWav(path.join(dir, files[k]));
+      pcm = wav.samples || wav;
+    } catch {
+      skipped += 1;
+      continue;
+    }
     secs += pcm.length / SR;
     let r = null;
     try { r = runOne(pcm); } catch { r = null; }
@@ -137,7 +146,15 @@ function runOne(pcm) {
 
   console.log('');
   console.log('  === 结果 ===');
-  console.log('  音频总长: ' + (secs / 60).toFixed(1) + ' 分钟');
+  if (expectWord) {
+    const planOf = new Map(planner.listVerbose().map((p) => [p.say, JSON.stringify((p.plan && p.plan.steps) || [])]));
+    const samePlan = (a, b) => a && b && planOf.get(a) === planOf.get(b);
+    const ok = hits.filter((h) => h.acted === expectWord || samePlan(h.acted, expectWord));
+    const wrong = hits.filter((h) => !(h.acted === expectWord || samePlan(h.acted, expectWord)));
+    console.log('  【召回】目标词「' + expectWord + '」正确执行 ' + ok.length + ' / ' + files.length + ' = ' + (ok.length / files.length * 100).toFixed(1) + '%');
+    console.log('  【错词】被听成别的词 ' + wrong.length + ' 条');
+  }
+  console.log('  音频总长: ' + (secs / 60).toFixed(1) + ' 分钟' + (skipped ? '（跳过 ' + skipped + ' 条读不了的）' : ''));
   console.log('  门到期次数(候选被提出): ' + fires + ' / ' + files.length + ' 条');
   console.log('  执行动作次数: ' + triggers + ' / ' + files.length + ' 条');
   console.log('  触发率: ' + (triggers / files.length * 100).toFixed(2) + '%');
