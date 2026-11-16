@@ -202,6 +202,12 @@ class Capture {
     } catch {
       return { saved: false, why: 'index-failed' };
     }
+    // 关键：必须同步更新 list() 的缓存，否则下一次算 maxId 时读到的还是旧数据，
+    // 会又分配同一个 id、覆盖刚写的 wav（实测 seg-0520 被写了三行）。
+    if (this.cache) this.cache.push(entry);
+    this._stats = null;
+    this.whyCounts = null;
+    this.count = this.list().length;
     return { saved: true, entry };
   }
 
