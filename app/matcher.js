@@ -160,4 +160,46 @@ function matchAtEnd(text, words, opts = {}) {
   return matchOne(text, pool, opts);
 }
 
-module.exports = { matchOne, matchAtEnd, bestScore, scoreAgainst, normalize, toPinyin, similarity, editDistance };
+
+/**
+ * 在一整句里"找"关键词（滑窗），给非流式模型（M2）的整句转写用。
+ *
+ * 为什么不直接用 scoreAgainst：它带长度护栏，整句太长会直接 0 分
+ * （护栏对 M1 的整句判断是对的，但 M2 的转写天生就是整句）。
+ *
+ * @param {string} text   M2 的整句转写
+ * @param {Array} words   [{word, planKey}]
+ * @param {{threshold?:number}} opts
+ */
+function findWord(text, words, opts = {}) {
+  const threshold = opts.threshold ?? 0.70;
+  const t = normalize(text);
+  if (!t) return null;
+  const scored = [];
+  for (const item of words) {
+    const w = normalize(item.word);
+    if (!w) continue;
+    let best = { score: 0, how: 'none' };
+    // 窗口长度在关键词长度 ±1 之间滑动：容忍多字/缺字
+    for (let len = Math.max(1, w.length - 1); len <= w.length + 1; len += 1) {
+      if (len > t.length) break;
+      for (let i = 0; i + len <= t.length; i += 1) {
+        const chunk = t.slice(i, i + len);
+        const charSim = similarity(chunk.split(''), w.split(''));
+        const pySim = similarity(toPinyin(chunk), toPinyin(w));
+        const score = Math.max(charSim, pySim);
+        if (score > best.score) best = { score, how: pySim >= charSim ? 'pinyin-window' : 'char-window' };
+      }
+    }
+    if (best.score > 0) {
+      scored.push({ word: item.word, planKey: item.planKey || item.word, score: best.score, how: best.how });
+    }
+  }
+  if (!scored.length) return null;
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored[0];
+  if (top.score < threshold) return null;
+  return { word: top.word, planKey: top.planKey, score: top.score, how: top.how };
+}
+
+module.exports = { matchOne, matchAtEnd, bestScore, scoreAgainst, normalize, toPinyin, similarity, editDistance, findWord };

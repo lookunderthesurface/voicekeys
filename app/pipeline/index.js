@@ -75,6 +75,15 @@ class Pipeline {
       const m = wordMeta && wordMeta.get ? wordMeta.get(w) : null;
       return m && typeof m.m2 === 'number' ? m.m2 : threshold;
     };
+    // 唤醒/结束词（isHandy）用"任意位置匹配"：它们天生出现在连续说话里，
+    // 要求"句尾匹配"会让"说完马上接话"必失败（用户 B 实验）。
+    // M2 给出的是"整句话"，关键词可能出现在句中（尤其唤醒/结束词后面接着说话）。
+    // 所以 M2 这一侧统一用 findWord（滑窗找词），不用 matchAtEnd。
+    const m2MatchOf = (text, list, minThreshold) => {
+      const fn = this.deps.m1.findWord || this.deps.m1.matchOne;
+      return text ? fn.call(this.deps.m1, text, list, { threshold: minThreshold }) : null;
+    };
+
     let m2 = { usable: false, word: null, text: '', ms: null };
     if (handle && handle.promise) {
       try {
@@ -87,7 +96,7 @@ class Pipeline {
           if (wordMeta && typeof wordMeta.forEach === 'function') {
             wordMeta.forEach((m) => { if (m && typeof m.m2 === 'number' && m.m2 < minM2) minM2 = m.m2; });
           }
-          const m2Match = out.text ? this.deps.m1.matchAtEnd(out.text, list, { threshold: minM2 }) : null;
+          const m2Match = m2MatchOf(out.text, list, minM2);
           // matchAtEnd 用 0 阈值先拿到候选与分数，再用该词自己的 m2 阈值筛
           if (m2Match && !m2Match.ambiguous && m2Match.score < m2ThresholdOf(m2Match.word)) {
             m2Match.matched = false;
@@ -126,7 +135,7 @@ class Pipeline {
           const out2 = await this.deps.m2.confirm(audio2, 1500);
           if (out2 && !out2.timeout && !out2.error) {
             const list = this.deps.words();
-            const m2b = out2.text ? this.deps.m1.matchAtEnd(out2.text, list, { threshold }) : null;
+            const m2b = m2MatchOf(out2.text, list, threshold);
             const word2 = m2b && !m2b.ambiguous ? m2b.word : null;
             const verdict2 = policy.decide({
               word: candidate.word,
