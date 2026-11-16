@@ -52,6 +52,7 @@ function currentAction(r) {
   const v = policy.verdictFromScores({
     candidate: r.ourText,
     m1Score: Number(r.bestScore) || 0,
+    m1How: r.m1How,
     scored,
     thresholdOf: () => TH,
   });

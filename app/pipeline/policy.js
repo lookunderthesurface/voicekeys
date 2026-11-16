@@ -143,6 +143,7 @@ function sharesRun(a, b, minLen = 2) {
  * @param {object} input
  * @param {string} input.candidate       M1 提出的词
  * @param {number} input.m1Score         M1 对该词的分数
+ * @param {string} [input.m1How]         M1 的匹配方式（exact / prefix / pinyin …），用来判断 M1 够不够确信
  * @param {Array}  input.scored          [{word, score}] 已降序
  * @param {Function} input.thresholdOf   该词的 M2 阈值 (word) => number
  * @param {object} [input.policy]
@@ -173,12 +174,19 @@ function verdictFromScores(input) {
   const confused = isPartner && candScore >= p.nearWordScore
     && (top1.score - candScore) < p.confusionMargin;   // M2 两个词分数相近，才算真困惑
   if (confused) {
-    if (input.m1Score >= th(cand)) {
+    // 只有 M1 是"整句完全等于关键词"（exact）才算 M1 真听清了；否则 M1 自己也困惑，
+    // 这时不要听 M1 的，按 M2 的最高分词决定（用户 2026-11-16 定的规则）。
+    const m1Sure = input.m1How === 'exact' && input.m1Score >= th(cand);
+    if (m1Sure) {
       return { action: 'fire', word: cand, rule: 'm2-confused-m1-decides',
-        why: 'M2 听成近音词「' + top1.word + '」，候选词仍有 ' + candScore.toFixed(2) + '，听 M1 的（M1 ' + input.m1Score.toFixed(2) + '）' };
+        why: 'M2 听成近音词「' + top1.word + '」，但 M1 是精确命中（' + input.m1Score.toFixed(2) + '），听 M1 的' };
     }
-    return { action: 'drop', rule: 'm2-confused-m1-unsure',
-      why: 'M2 听成近音词「' + top1.word + '」，M1 也不够自信（' + input.m1Score.toFixed(2) + '）' };
+    if (top1.score >= th(top1.word)) {
+      return { action: 'swap', word: top1.word, rule: 'm2-confused-both-m2-decides',
+        why: 'M1 也没听全（' + (input.m1How || '?') + ' ' + Number(input.m1Score).toFixed(2) + '），M2 更倾「' + top1.word + '」（' + top1.score.toFixed(2) + '），按 M2 的' };
+    }
+    return { action: 'drop', rule: 'm2-confused-both-unsure',
+      why: 'M1 没听全、M2 也只听到「' + top1.word + '」' + top1.score.toFixed(2) + '，都不可靠' };
   }
   if (top1.score < th(top1.word)) {
     // M2 说的"别的词"也没有足够把握 → 不当成改判依据
