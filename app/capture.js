@@ -167,8 +167,11 @@ class Capture {
       if (Math.sqrt(ps / 1600) > 0.03) voiced += 1;
     }
 
-    this.count = (typeof this.count === 'number' ? this.count : this.list().length) + 1;
-    const id = String(this.count).padStart(4, '0');
+    // id 必须与"条数"脱钩：index 被清理后条数会变小，再用条数当 id 会覆盖旧录音。
+    const existing = this.list();
+    this.count = existing.length;
+    const maxId = existing.reduce((m, e) => Math.max(m, Number(e.id) || 0), 0);
+    const id = String(maxId + 1).padStart(4, '0');
     const file = `seg-${id}.wav`;
     try {
       this.writeWav(path.join(this.dir, file), [pcm]);
@@ -318,7 +321,9 @@ class Capture {
     }
     if (why === 'diagnostic') this.diagnosticCount = (this.diagnosticCount || 0) + 1;
 
-    const id = String(this.count + 1).padStart(4, '0');
+    const existing = this.list();
+    const maxId = existing.reduce((m, e) => Math.max(m, Number(e.id) || 0), 0);
+    const id = String(maxId + 1).padStart(4, '0');
     const file = path.join(this.dir, `seg-${id}.wav`);
     try {
       this.writeWav(file, seg.buffer);
