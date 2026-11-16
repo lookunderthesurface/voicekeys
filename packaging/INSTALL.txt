@@ -1,0 +1,37 @@
+VoiceKeys 安装说明
+==================
+
+1. 双击 VoiceKeys-Setup-0.2.0.exe
+2. 安装完成后点「是」启动（或从开始菜单打开 VoiceKeys）
+3. 浏览器会自动打开 http://127.0.0.1:19600/
+
+装在哪里
+--------
+  程序：%LOCALAPPDATA%\Programs\VoiceKeys
+  数据：%LOCALAPPDATA%\VoiceKeys
+        （关键词、设置、录音素材、日志、模型都在这里；卸载默认保留）
+
+第一次运行
+----------
+* 会自动建好数据目录并放 8 个示例关键词
+* 顶部会提示还没有语音模型，两个选择：
+    「我本地有，指定目录」 —— 贴模型所在路径
+    「没有，帮我下载」     —— 自动下载约 155MB
+* 模型下完点页面右上角的重启，或重新打开应用
+
+怎么停
+------
+开始菜单 → VoiceKeys → 「停止 VoiceKeys」
+（安装器会放一个 stop.cmd，双击即可）
+
+卸载
+----
+设置 → 应用 → VoiceKeys → 卸载
+或开始菜单里那项；卸载只删程序，数据目录保留，想清空自己删 %LOCALAPPDATA%\VoiceKeys
+
+常见问题
+--------
+* 双击没反应：看 %LOCALAPPDATA%\VoiceKeys\logs\supervisor.log
+* 听到词没动作：看 logs\app.log，最后几行会写「门到期 / 确认 / 丢弃」的原因
+* 开机自启：把开始菜单里的 VoiceKeys 快捷方式拖进
+  shell:startup（Win+R 输入 shell:startup 打开）

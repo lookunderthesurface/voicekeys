@@ -727,11 +727,22 @@ async function startLoop() {
       try {
         frame = await source.read();
       } catch (e) {
-        log('读取失败: ' + e.message);
+        state.readFails = (state.readFails || 0) + 1;
+        if (state.readFails <= 3) log('读取失败(' + state.readFails + '): ' + e.message);
+        // 连续失败太多次说明录音链路已经坏了（麦克风被抢/设备掉线/驱动卡死）：
+        // 停掉旧源、按退避重建。只记前几条，避免日志刷屏。
+        if (state.readFails >= 20) {
+          log('音频连续失败 ' + state.readFails + ' 次，重建音频源');
+          state.readFails = 0;
+          try { if (source && source.stop) source.stop(); } catch { /* ignore */ }
+          await new Promise((r) => setTimeout(r, 1000));
+          try { startLoop(); } catch (err) { log('重建音频源失败: ' + (err && err.message)); }
+        }
         await new Promise((r) => setTimeout(r, 200));
         continue;
       }
       if (frame) lastAudioAt = Date.now();
+      if (frame) state.readFails = 0;
   if (!frame) {
         if (!state.nullLogged) {
           state.nullLogged = true;
@@ -1332,6 +1343,12 @@ function shutdown() {
 // 后台任务（校准、快照）里的异常不应该把语音服务带崩：记录并继续
 process.on('unhandledRejection', (e) => {
   log('未处理的异步错误: ' + String((e && e.stack) || e).split('\n').slice(0, 3).join(' | '));
+});
+
+// 未捕获的同步异常默认会让进程直接退出、日志里什么都看不到（2026-11-16 夜里就是这么没的）。
+// 记下来，尽量活下去；真到了无法继续也只能重启，但至少知道死因。
+process.on('uncaughtException', (e) => {
+  log('未捕获异常: ' + String((e && e.stack) || e).split('\\n').slice(0, 4).join(' | '));
 });
 
 process.on('SIGINT', shutdown);

@@ -1,27 +1,44 @@
-﻿// VoiceKeys 启动器（.NET Framework 自带 csc 编译，不需要额外工具链）
+// VoiceKeys 启动器 / 守护进程（用系统自带 csc 编译，不需要额外工具链）
 //
-// 为什么要有它：用户下载 zip 解压后双击一个 exe 就能用，不需要装 Node、不弹黑框。
-// 它做的事：① 如果 19600 已经在监听 → 直接开浏览器；② 否则静默拉起 runtime\node.exe app\server.js，
-// 把 stdout/stderr 写进 %LOCALAPPDATA%\VoiceKeys\logs\；③ 等端口起来再开浏览器。
+// 为什么是"守护进程"而不只是"启动一次"：
+// 2026-11-16 用户反馈"喊了没反应"，查下来是进程在夜里没了（日志最后一条是麦克风读取失败）。
+// 桌面常驻应用必须自己看住自己：node 退出就按退避重启，并把每次重启写进 supervisor.log。
+//
+// 用法：
+//   VoiceKeys.exe            启动（若已在跑则只开浏览器）
+//   VoiceKeys.exe --stop     停止守护进程与 node 子进程
+//   VoiceKeys.exe --no-browser   启动但不自动打开浏览器
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 
 class VoiceKeysLauncher
 {
     const int Port = 19600;
+    const string Marker = "VoiceKeys supervisor";
 
-    static string BaseDir()
-    {
-        return AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
-    }
-
+    static string BaseDir() { return AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\'); }
     static string DataDir()
     {
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(local, "VoiceKeys");
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VoiceKeys");
+    }
+    static string LogsDir() { return Path.Combine(DataDir(), "logs"); }
+
+    static void Append(string name, string line)
+    {
+        try
+        {
+            Directory.CreateDirectory(LogsDir());
+            lock (typeof(VoiceKeysLauncher))
+            {
+                File.AppendAllText(Path.Combine(LogsDir(), name),
+                    DateTime.Now.ToString("HH:mm:ss.fff") + "  " + line + Environment.NewLine, Encoding.UTF8);
+            }
+        }
+        catch { }
     }
 
     static bool PortOpen()
@@ -45,74 +62,127 @@ class VoiceKeysLauncher
         catch { }
     }
 
-    [STAThread]
-    static int Main(string[] args)
+    static int[] FindSupervisors()
     {
-        var baseDir = BaseDir();
-        var node = Path.Combine(baseDir, "runtime", "node.exe");
-        var server = Path.Combine(baseDir, "app", "server.js");
-
-        if (!File.Exists(node) || !File.Exists(server))
-        {
-            Console.Error.WriteLine("安装不完整：找不到 runtime\\node.exe 或 app\\server.js");
-            return 2;
-        }
-
-        // 已经在跑：直接开浏览器
-        if (PortOpen())
-        {
-            OpenBrowser();
-            return 0;
-        }
-
-        var logs = Path.Combine(DataDir(), "logs");
-        Directory.CreateDirectory(logs);
-
-        var psi = new ProcessStartInfo();
-        psi.FileName = node;
-        psi.Arguments = "\"" + server + "\" --port " + Port;
-        psi.WorkingDirectory = baseDir;
-        psi.UseShellExecute = false;
-        psi.CreateNoWindow = true;
-        psi.RedirectStandardOutput = true;
-        psi.RedirectStandardError = true;
-        // Node 输出 UTF-8；不指定的话 .NET 会按系统 ANSI 解，中文全成乱码
-        psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
-        psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
-
-        var proc = new Process();
-        proc.StartInfo = psi;
-        proc.OutputDataReceived += (s, e) => { if (e.Data != null) Append(Path.Combine(logs, "stdout.log"), e.Data); };
-        proc.ErrorDataReceived += (s, e) => { if (e.Data != null) Append(Path.Combine(logs, "stderr.log"), e.Data); };
-        proc.Start();
-        proc.BeginOutputReadLine();
-        proc.BeginErrorReadLine();
-
-        // 等端口（最多 30 秒），起来就开浏览器
-        for (int i = 0; i < 60; i++)
-        {
-            Thread.Sleep(500);
-            if (PortOpen()) { OpenBrowser(); return 0; }
-            if (proc.HasExited)
-            {
-                Append(Path.Combine(logs, "stdout.log"), "[launcher] node 退出，代码 " + proc.ExitCode);
-                return (int)proc.ExitCode;
-            }
-        }
-
-        Append(Path.Combine(logs, "stdout.log"), "[launcher] 30 秒内端口未就绪，请看 logs/ 下的日志");
-        return 3;
-    }
-
-    static void Append(string file, string line)
-    {
+        // 用 WMI 找同名进程（不是本进程），避免重复守护
+        var list = new System.Collections.Generic.List<int>();
         try
         {
-            lock (typeof(VoiceKeysLauncher))
+            var self = Process.GetCurrentProcess().Id;
+            foreach (var p in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetExecutingAssembly().Location)))
             {
-                File.AppendAllText(file, DateTime.Now.ToString("HH:mm:ss.fff") + "  " + line + Environment.NewLine);
+                if (p.Id != self) list.Add(p.Id);
             }
         }
         catch { }
+        return list.ToArray();
+    }
+
+    static void StopAll()
+    {
+        try
+        {
+            var pidFile = Path.Combine(DataDir(), "app.pid");
+            if (File.Exists(pidFile))
+            {
+                int pid;
+                if (int.TryParse(File.ReadAllText(pidFile).Trim(), out pid))
+                {
+                    try { Process.GetProcessById(pid).Kill(); Append("supervisor.log", "已结束 node PID " + pid); }
+                    catch { }
+                }
+            }
+        }
+        catch { }
+        foreach (var pid in FindSupervisors())
+        {
+            try { Process.GetProcessById(pid).Kill(); Append("supervisor.log", "已结束另一个守护进程 PID " + pid); }
+            catch { }
+        }
+    }
+
+    [STAThread]
+    static int Main(string[] args)
+    {
+        bool stop = false, noBrowser = false;
+        foreach (var a in args)
+        {
+            if (a == "--stop") stop = true;
+            if (a == "--no-browser") noBrowser = true;
+        }
+
+        if (stop) { StopAll(); return 0; }
+
+        var baseDir = BaseDir();
+        var node = Path.Combine(baseDir, "runtime", "node.exe");
+        var server = Path.Combine(baseDir, "app", "server.js");
+        if (!File.Exists(node) || !File.Exists(server))
+        {
+            Append("supervisor.log", "安装不完整：缺 runtime\\node.exe 或 app\\server.js（" + baseDir + "）");
+            return 2;
+        }
+
+        // 已经有实例在跑：只开浏览器
+        if (PortOpen())
+        {
+            if (!noBrowser) OpenBrowser();
+            Append("supervisor.log", "已有实例在跑，只打开浏览器");
+            return 0;
+        }
+
+        Append("supervisor.log", Marker + " 启动，安装目录 " + baseDir);
+
+        int backoff = 1000;
+        bool opened = false;
+        while (true)
+        {
+            var psi = new ProcessStartInfo();
+            psi.FileName = node;
+            psi.Arguments = "\"" + server + "\" --port " + Port;
+            psi.WorkingDirectory = baseDir;
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+            psi.StandardOutputEncoding = Encoding.UTF8;
+            psi.StandardErrorEncoding = Encoding.UTF8;
+
+            Process proc;
+            try
+            {
+                proc = new Process();
+                proc.StartInfo = psi;
+                proc.OutputDataReceived += (s, e) => { if (e.Data != null) Append("stdout.log", e.Data); };
+                proc.ErrorDataReceived += (s, e) => { if (e.Data != null) Append("stderr.log", e.Data); };
+                proc.Start();
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+            }
+            catch (Exception ex)
+            {
+                Append("supervisor.log", "启动 node 失败: " + ex.Message);
+                Thread.Sleep(backoff);
+                continue;
+            }
+
+            // 等端口就绪 → 开浏览器
+            for (int i = 0; i < 60 && !proc.HasExited; i++)
+            {
+                Thread.Sleep(500);
+                if (PortOpen())
+                {
+                    if (!opened && !noBrowser) { OpenBrowser(); opened = true; }
+                    break;
+                }
+            }
+
+            proc.WaitForExit();
+            int code = proc.ExitCode;
+            Append("supervisor.log", "node 退出（代码 " + code + "），" + (backoff / 1000.0) + " 秒后重启");
+            try { proc.Dispose(); } catch { }
+            Thread.Sleep(backoff);
+            backoff = Math.Min(backoff * 2, 30000);
+            if (PortOpen()) { Thread.Sleep(3000); }
+        }
     }
 }
