@@ -104,6 +104,25 @@ const candidate = new CandidateTracker();
 const confirmer = new Confirmer({ log });
 // 连续环形缓冲：保存最近 6 秒音频，专供确认模型使用（不受切句影响）
 const VOICED_GATE_MS = 300;   // 判断第一条件：这段音频必须真的有人说话
+
+// 素材窗口：触发前 4 秒 + 触发后 1 秒（用户要求：把窗口往后挪，
+// 这样"刚触发之后"的声音也在里面，便于回看"是不是之前喊过失败的那次"）
+const CAPTURE_TAIL_MS = 1000;
+
+/** 延迟一段时间再存素材：这样窗口能覆盖到"触发之后"的 CAPTURE_TAIL_MS */
+function captureAfterFire(word, extra) {
+  const t = setTimeout(() => {
+    try {
+      if (capture.full) autoCleanCapture();
+      capture.recordDecision({
+        audio: recentAudio(5000),
+        word,
+        ...extra,
+      });
+    } catch (e) { log('采集失败: ' + e.message); }
+  }, CAPTURE_TAIL_MS);
+  t.unref?.();
+}
 const AUDIO_RING_FRAMES = 60;          // 60 × 100ms = 6 秒
 const AUDIO_RING = [];
 const AUDIO_RMS = [];       // 与 AUDIO_RING 对齐的音量历史
@@ -468,7 +487,12 @@ function handleAsrMessage(msg) {
   if (!cand) {
     candidate.invalidate('文本已变化');
     if (trigger && trigger.pending) {
-      const cancelled = trigger.cancelPending('又出现了新文字');
+      // 唤醒/结束词（ignoreNoisy）天生出现在连续说话里：
+      // 说完「我说完了」立刻接话是常态，不该把候选取消掉（用户 B 实验就是死在这里）。
+      const pendingWord = trigger.pending.word;
+      const pendingMeta = trigger.meta ? trigger.meta[pendingWord] : null;
+      const ignoreNoisy = Boolean(pendingMeta && pendingMeta.ignoreNoisy);
+      const cancelled = ignoreNoisy ? null : trigger.cancelPending('又出现了新文字');
       // 允许立刻重说同一个词（否则 2.5 秒去重会把它挡掉）
       if (cancelled && state.lastWordFireAt) delete state.lastWordFireAt[cancelled];
     }
@@ -594,14 +618,12 @@ async function confirmDecision(word) {
   state.pendingConfirm = null;
   if (!pc) return { word, source: 'no-candidate' };
   if (pc.fast) {
-    // 素材①：M1 非常自信，没问 M2
-    try {
-      if (capture.full) autoCleanCapture();
-      capture.recordDecision({
-        audio: recentAudio(5000), word, m1Score: pc.candidate ? pc.candidate.score : 1,
-        m1How: pc.candidate ? pc.candidate.how : 'exact', verdict: 'fast-path', path: 'fast',
-      });
-    } catch (e) { log('采集失败: ' + e.message); }
+    // 素材①：M1 非常自信，没问 M2 —— 只在真要执行时录，窗口延后 1 秒
+    captureAfterFire(word, {
+      m1Score: pc.candidate ? pc.candidate.score : 1,
+      m1How: pc.candidate ? pc.candidate.how : 'exact',
+      verdict: 'fast-path', path: 'fast',
+    });
     return { word, source: 'fast-path' };
   }
 
@@ -619,12 +641,9 @@ async function confirmDecision(word) {
 
   pushEvent({ type: 'confirm', word, reason: verdict.reason });
 
-  // 素材②：M1 不确定，问了 M2 —— 记下 M2 实际听到的音频与结论
-  try {
-    if (capture.full) autoCleanCapture();
-    capture.recordDecision({
-      audio: recentAudio(5000),   // 素材存 5 秒：为了能找出"之前喊失败的那一次"
-      word,
+  // 素材②：只在"真的要执行"时录（M2 否决的、以及被新文字取消的都不占素材名额）
+  if (verdict.action === 'fire' || verdict.action === 'swap') {
+    captureAfterFire(verdict.word || word, {
       m1Score: pc.candidate ? pc.candidate.score : 1,
       m1How: pc.candidate ? pc.candidate.how : 'exact',
       m2Text: verdict.m2 ? verdict.m2.text : '',
@@ -632,7 +651,7 @@ async function confirmDecision(word) {
       verdict: verdict.rule,
       path: 'm2',
     });
-  } catch (e) { log('采集失败: ' + e.message); }
+  }
 
   if (verdict.action === 'fire') return { word: verdict.word || word, source: verdict.rule };
   if (verdict.action === 'swap') {
