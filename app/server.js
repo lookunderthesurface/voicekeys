@@ -761,6 +761,13 @@ async function startLoop() {
       for (let i = 0; i < frame.length; i += 1) sum += frame[i] * frame[i];
       const rms = Math.sqrt(sum / frame.length);
       state.lastRms = rms;
+      // 有人声就把 M2 预热起来（空闲 15 分钟会卸载，第一次唤醒不该多等 300ms）
+      if (rms > 0.012) {
+        try {
+          if (!m2PreloadAt) { m2PreloadAt = Date.now(); log('检测到人声，预热确认模型'); }
+          confirmer.preload();
+        } catch { /* 预热失败不影响主流程 */ }
+      }
       const nowMs = Date.now();
       if (nowMs - (state.peakAt || 0) > 2000) { state.peak2s = 0; state.peakAt = nowMs; }
       if (rms > (state.peak2s || 0)) state.peak2s = rms;

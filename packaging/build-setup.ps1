@@ -57,6 +57,14 @@ if (-not (Test-Path $launcherExe)) {
 }
 Write-Host ('   VoiceKeys.exe: ' + [math]::Round((Get-Item $launcherExe).Length / 1KB, 1) + ' KB')
 
+Write-Host '== 3.5/8 编译卸载器（约 10KB，替换原来 45MB 的自复制） ==' -ForegroundColor Cyan
+$uninstExe = Join-Path $payloadDir 'uninstall.exe'
+$out3 = & $csc /nologo /target:winexe /out:$uninstExe /optimize+ /win32manifest:$manifest (Join-Path $root 'packaging\uninstaller.cs') 2>&1
+if (-not (Test-Path $uninstExe)) {
+  $out3 | ForEach-Object { Write-Host ('   ' + $_) -ForegroundColor Red }
+  throw '卸载器编译失败'
+}
+Write-Host ('   uninstall.exe: ' + [math]::Round((Get-Item $uninstExe).Length / 1KB, 1) + ' KB')
 Write-Host '== 4/8 打 payload.zip ==' -ForegroundColor Cyan
 $payloadZip = Join-Path $stage 'payload.zip'
 Compress-Archive -Path (Join-Path $payloadDir '*') -DestinationPath $payloadZip -CompressionLevel Optimal
@@ -119,24 +127,10 @@ try {
   Remove-Item Env:\VOICEKEYS_DATA -ErrorAction SilentlyContinue
 }
 
-Write-Host '== 7/8 打用户要的压缩包（里面一个 setup） ==' -ForegroundColor Cyan
-$zip = Join-Path $dist "VoiceKeys-Setup-$Version.zip"
-$zipStage = Join-Path $stage 'zip'
-New-Item -ItemType Directory -Path $zipStage -Force | Out-Null
-Copy-Item $setupExe $zipStage -Force
-if (Test-Path (Join-Path $root 'packaging\INSTALL.txt')) { Copy-Item (Join-Path $root 'packaging\INSTALL.txt') $zipStage -Force }
-Compress-Archive -Path (Join-Path $zipStage '*') -DestinationPath $zip -Force
-Write-Host ('   zip: ' + [math]::Round((Get-Item $zip).Length / 1MB, 1) + ' MB') -ForegroundColor Green
-
-Write-Host '== 8/8 校验值 ==' -ForegroundColor Cyan
+Write-Host '== 7/8 校验值 ==' -ForegroundColor Cyan
 $h1 = (Get-FileHash $setupExe -Algorithm SHA256).Hash
-$h2 = (Get-FileHash $zip -Algorithm SHA256).Hash
-@(
-  "$h1  VoiceKeys-Setup-$Version.exe"
-  "$h2  VoiceKeys-Setup-$Version.zip"
-) | Set-Content (Join-Path $dist 'SHA256.txt') -Encoding utf8
+"$h1  VoiceKeys-Setup-$Version.exe" | Set-Content (Join-Path $dist 'SHA256.txt') -Encoding utf8
 Write-Host ('   setup sha256: ' + $h1)
-Write-Host ('   zip   sha256: ' + $h2)
 
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-Write-Host '完成' -ForegroundColor Green
+Write-Host '完成（只产出 setup.exe；用户不需要先解压 zip）' -ForegroundColor Green

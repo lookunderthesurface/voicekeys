@@ -136,8 +136,9 @@ class VoiceKeysSetup
         Shortcut(Path.Combine(desktop, "VoiceKeys.lnk"), exe);
 
         // 开始菜单里的卸载入口 + 控制面板的卸载项（HKCU，不需要管理员）
+        // payload 里自带一个小卸载器（约 10KB），不要再把自己复制一份（那是 45MB 的重复）
         string uninstaller = Path.Combine(dir, "uninstall.exe");
-        try { File.Copy(Process.GetCurrentProcess().MainModule.FileName, uninstaller, true); } catch (Exception e) { Log("复制卸载器失败: " + e.Message); }
+        if (!File.Exists(uninstaller)) Log("警告：payload 里没有 uninstall.exe");
         using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\VoiceKeys"))
         {
             if (k != null)
