@@ -489,13 +489,11 @@ function handleAsrMessage(msg) {
   if (!cand) {
     candidate.invalidate('文本已变化');
     if (trigger && trigger.pending) {
-      // 唤醒/结束词（ignoreNoisy）天生出现在连续说话里：
-      // 说完「我说完了」立刻接话是常态，不该把候选取消掉（用户 B 实验就是死在这里）。
-      const pendingWord = trigger.pending.word;
-      const pendingMeta = trigger.meta ? trigger.meta[pendingWord] : null;
-      const ignoreNoisy = Boolean(pendingMeta && pendingMeta.ignoreNoisy);
-      const cancelled = ignoreNoisy ? null : trigger.cancelPending('又出现了新文字');
-      // 允许立刻重说同一个词（否则 2.5 秒去重会把它挡掉）
+      // 文本继续变化、这句话已经不再以某个关键词结尾 → 说明词是在句子中间说的
+      // （用户 2026-11-17：静音门的语义就是"词说完后没声音"才成立）。
+      // 对所有词都取消，不再对 ignoreNoisy 豁免。
+      const cancelled = trigger.cancelPending('又出现了新文字');
+      // 允许立刻重说同一个词（否则去重会把它挡掉）
       if (cancelled && state.lastWordFireAt) delete state.lastWordFireAt[cancelled];
     }
     return;
@@ -520,8 +518,12 @@ function handleAsrMessage(msg) {
   // 用户 2026-11-16 明确：不需要"同一个词 2.5 秒内不重复"的去重
   // （他要是 2.5 秒内说两遍，那是他自己的事，不该被程序拦住）
   {
-    if (!(trigger && trigger.pending)) {
-      if (trigger) trigger.queue(cand.word);
+    // 每次 M1 文本更新且仍然匹配 → 重置静音门的计时。
+    // 这样"词还没说完就匹配上"时，门会等词真正说完+静音满 pauseMs 才响，
+    // 而不是从第一次（可能不完整的）匹配起算（用户 2026-11-17 指出这是设计问题）。
+    const wasPending = Boolean(trigger && trigger.pending);
+    if (trigger) trigger.queue(cand.word);
+    if (!wasPending) {
       log('门开始计时：M2 已加载 ' + (m2PreloadAt ? (Date.now() - m2PreloadAt) : 0) + 'ms' + (m2PreloadAt ? '' : '（未预热）'));
       capture.markFired(cand.word, state.asrText);
     }
