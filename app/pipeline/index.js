@@ -96,16 +96,26 @@ class Pipeline {
           if (wordMeta && typeof wordMeta.forEach === 'function') {
             wordMeta.forEach((m) => { if (m && typeof m.m2 === 'number' && m.m2 < minM2) minM2 = m.m2; });
           }
-          const m2Match = m2MatchOf(out.text, list, minM2);
-          // matchAtEnd 用 0 阈值先拿到候选与分数，再用该词自己的 m2 阈值筛
-          if (m2Match && !m2Match.ambiguous && m2Match.score < m2ThresholdOf(m2Match.word)) {
-            m2Match.matched = false;
+          // 先算"候选词自己"在这句转写里的分数（滑窗），够阈值就认它；
+          // 只有它不够、且别的词明显更强时才允许改判——
+          // 否则会出现"用户说「我说完了」，M2 却判定成「听我说」并执行"（日志 11:39:42）。
+          const own = m2MatchOf(out.text, [{ word: candidate.word, planKey: candidate.word }], 0);
+          const ownScore = own ? own.score : 0;
+          const best = m2MatchOf(out.text, list, minM2);
+          let m2Word = null;
+          if (ownScore >= m2ThresholdOf(candidate.word)) {
+            m2Word = candidate.word;
+          } else if (best && !best.ambiguous && best.word !== candidate.word
+                     && best.score >= m2ThresholdOf(best.word) && best.score > ownScore + 0.1) {
+            m2Word = best.word;
           }
           m2 = {
             usable: true,
             text: out.text || '',
-            word: m2Match && !m2Match.ambiguous && m2Match.matched !== false ? m2Match.word : null,
+            word: m2Word,
             ms: out.ms || null,
+            ownScore,
+            bestScore: best && !best.ambiguous ? best.score : null,
           };
         }
       } catch (e) {
@@ -128,40 +138,6 @@ class Pipeline {
       threshold,
     });
 
-
-    // 判成丢弃时，若 M2 根本没给出结果（promise 为空/超时），或候选是缺字命中，
-    // 就用门到期时的完整音频补问一次 M2（约 43ms）。只是保证"问了 M2 就真拿到答案"。
-    const needRetry = !m2.usable || candidate.degraded;
-    if (verdict.action === 'drop' && needRetry && typeof retryAudio === 'function') {
-      try {
-        const audio2 = retryAudio();
-        if (process.env.VK_DEBUG_AUDIO) console.error('[retry] 切片 ' + (audio2.length / 16000).toFixed(2) + 's');
-        if (audio2 && audio2.length > 1600) {
-          const out2 = await this.deps.m2.confirm(audio2, 1500);
-          if (out2 && !out2.timeout && !out2.error) {
-            const list = this.deps.words();
-            const m2b = m2MatchOf(out2.text, list, threshold);
-            const word2 = m2b && !m2b.ambiguous ? m2b.word : null;
-            const verdict2 = policy.decide({
-              word: candidate.word,
-              m1Score: candidate.score,
-              m1How: candidate.how,
-              m2Word: word2,
-              m2Text: out2.text || '',
-              m2Usable: true,
-              isHandy,
-              threshold,
-            });
-            if (verdict2.action !== 'drop') {
-              this.last = { at: Date.now(), candidate, m2: { usable: true, text: out2.text || '', word: word2, ms: out2.ms }, verdict: { ...verdict2, retried: true } };
-              return { ...verdict2, retried: true, m2: this.last.m2 };
-            }
-            m2 = { usable: true, text: out2.text || '', word: word2, ms: out2.ms };
-            verdict = verdict2;
-          }
-        }
-      } catch { /* 重判失败就按原判定 */ }
-    }
 
     this.last = { at: Date.now(), candidate, m2, verdict };
     return { ...verdict, m2 };
