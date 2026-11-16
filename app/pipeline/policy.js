@@ -26,6 +26,8 @@ const DEFAULT_POLICY = {
   nearWordScore: 0.45,
   // M2 侧：最高分低于这个 → 自信认为"不是任何词"
   m2Floor: 0.45,
+  // M2 侧：最高分和候选词的分数差小于这个，才算"M2 也困惑"（>=这个值说明 M2 更倾向别的词）
+  confusionMargin: 0.15,
 };
 
 /**
@@ -168,7 +170,9 @@ function verdictFromScores(input) {
 
   // top1 就是候选词但没过阈值 → 属于"M2 听得弱"，不是"听成近音词"，不能走这条
   const isPartner = top1.word && top1.word !== cand && sharesRun(cand, top1.word, 2);
-  if (isPartner && candScore >= p.nearWordScore) {
+  const confused = isPartner && candScore >= p.nearWordScore
+    && (top1.score - candScore) < p.confusionMargin;   // M2 两个词分数相近，才算真困惑
+  if (confused) {
     if (input.m1Score >= th(cand)) {
       return { action: 'fire', word: cand, rule: 'm2-confused-m1-decides',
         why: 'M2 听成近音词「' + top1.word + '」，候选词仍有 ' + candScore.toFixed(2) + '，听 M1 的（M1 ' + input.m1Score.toFixed(2) + '）' };
