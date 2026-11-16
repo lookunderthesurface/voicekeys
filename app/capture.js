@@ -189,7 +189,8 @@ class Capture {
       m2Text: d.m2Text || '',
       m2Word: d.m2Word || '',
       verdict: d.verdict || '',
-      fired: d.verdict !== 'm2-veto' && d.verdict !== 'degraded-needs-agreement',
+      // recordDecision 只在真要执行时被调用（server 的 captureAfterFire），所以恒为 true
+      fired: true,
     };
     try {
       fs.appendFileSync(this.indexFile, JSON.stringify(entry) + '\n');

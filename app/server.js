@@ -661,7 +661,7 @@ async function confirmDecision(word) {
     capture.remarkWord(verdict.word);
     return { word: verdict.word, source: verdict.rule };
   }
-  capture.markSuppressed();
+  // 判否的候选不入素材，这里不再标记（否则会错打到上一条已触发的记录）
   return null;
 }
 
