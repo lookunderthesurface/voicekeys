@@ -676,6 +676,9 @@ async function confirmDecision(word) {
   );
 
   pushEvent({ type: 'confirm', word, reason: verdict.reason });
+  if (verdict.m2 && verdict.m2.text) {
+    log('确认[' + word + ']: ' + verdict.reason + '  M2「' + verdict.m2.text + '」' + (verdict.m2.top1 ? '  top1=' + verdict.m2.top1 + ':' + Number(verdict.m2.top1Score || 0).toFixed(2) : ''));
+  }
 
   // 素材②：只在"真的要执行"时录（M2 否决的、以及被新文字取消的都不占素材名额）
   if (verdict.action === 'fire' || verdict.action === 'swap') {
