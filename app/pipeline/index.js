@@ -52,8 +52,13 @@ class Pipeline {
       };
     }
 
-    const best = this.deps.m1.bestScore(text, list);
-    const verdict = policy.shouldPropose(best, { threshold });
+    // 用户 2026-11-17：M1 = 对所有关键词打分，最高分就是候选。必须用滑窗 scoreAll；
+    // bestScore 是整句打分，文本比词长（>词长+3）时撞长度护栏返回 0，会漏掉长句结尾的词。
+    const all = (typeof this.deps.m1.scoreAll === 'function')
+      ? this.deps.m1.scoreAll(text, list)
+      : (() => { const b = this.deps.m1.bestScore(text, list); return b ? [{ word: b.word, score: b.score, how: b.how }] : []; })();
+    const best = all[0] || null;
+    const verdict = { propose: Boolean(best && best.score >= policy.DEFAULT_POLICY.candidateFloor), reason: 'scoreAll' };
     if (!verdict.propose) return null;   // M1 判"否" → 直接丢，不打扰 M2
 
     const mLoose = marginOf(text);
