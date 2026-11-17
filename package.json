@@ -1,6 +1,6 @@
 {
   "name": "voicekeys",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "语音触发 + AI 组合安全原语（原型）",
   "main": "src/cli.js",
