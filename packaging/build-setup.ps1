@@ -8,9 +8,9 @@
 # 为什么自己写安装器：本机没有 Inno Setup / NSIS，而 .NET Framework 的 csc 是 Windows 自带，
 # 用户不需要装任何工具；按用户安装（%LOCALAPPDATA%\Programs\VoiceKeys），不需要管理员权限。
 #
-# 用法：powershell -ExecutionPolicy Bypass -File packaging/build-setup.ps1 [-Version 0.2.2]
+# 用法：powershell -ExecutionPolicy Bypass -File packaging/build-setup.ps1 [-Version 0.2.3]
 
-param([string]$Version = '0.2.2')
+param([string]$Version = '0.2.3')
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
