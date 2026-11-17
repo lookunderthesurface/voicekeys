@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <clipPath id="clip"><rect width="512" height="512" rx="118"/></clipPath>
+    
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c3aed"/><stop offset="1" stop-color="#4c1d95"/></linearGradient>
+    <linearGradient id="clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe0c2"/><stop offset="1" stop-color="#ffb38a"/></linearGradient>
+    <filter id="clayShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#2a1458" flood-opacity=".55"/>
+    </filter>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    
+    <g filter="url(#clayShadow)">
+      <circle cx="150" cy="168" r="104" fill="url(#clay)"/>
+      <path d="M -20 552 V 420 C -20 330 60 300 150 300 C 240 300 180 330 180 420 V 552 Z" fill="url(#clay)"/>
+      <g fill="none" stroke="url(#clay)" stroke-linecap="round"><path d="M 256.1 96.4 A 128 128 0 0 1 256.1 239.6" stroke-width="34"/><path d="M 281.0 79.6 A 158 158 0 0 1 281.0 256.4" stroke-width="34"/><path d="M 305.9 62.9 A 188 188 0 0 1 305.9 273.1" stroke-width="34"/></g>
+      <rect x="336" y="120" width="176" height="168" rx="26" fill="url(#clay)"/>
+      <rect x="352" y="136" width="144" height="136" rx="16" fill="#4c1d95" opacity=".35"/>
+      <rect x="320" y="296" width="208" height="22" rx="11" fill="url(#clay)"/>
+    </g>
+    <g fill="#ffffff" opacity=".45">
+      <ellipse cx="116" cy="124" rx="26" ry="18" transform="rotate(-24 116 124)"/>
+    </g>
+  </g>
+</svg>

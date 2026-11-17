@@ -8,9 +8,9 @@
 # 为什么自己写安装器：本机没有 Inno Setup / NSIS，而 .NET Framework 的 csc 是 Windows 自带，
 # 用户不需要装任何工具；按用户安装（%LOCALAPPDATA%\Programs\VoiceKeys），不需要管理员权限。
 #
-# 用法：powershell -ExecutionPolicy Bypass -File packaging/build-setup.ps1 [-Version 0.2.4]
+# 用法：powershell -ExecutionPolicy Bypass -File packaging/build-setup.ps1 [-Version 0.2.5]
 
-param([string]$Version = '0.2.4')
+param([string]$Version = '0.2.5')
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -19,6 +19,7 @@ $stage = Join-Path $dist 'setup-stage'
 $payloadDir = Join-Path $stage 'payload'
 $node = (Get-Command node).Source
 $csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+$icon = Join-Path $root 'packaging\icon\VoiceKeys.ico'
 $manifest = Join-Path $root 'packaging\setup.manifest'
 $csRefs = @('/r:System.IO.Compression.dll', '/r:System.IO.Compression.FileSystem.dll')
 
@@ -50,7 +51,7 @@ if (Test-Path $nested) {
 
 Write-Host '== 3/8 编译启动器（必须在打包前） ==' -ForegroundColor Cyan
 $launcherExe = Join-Path $payloadDir 'VoiceKeys.exe'
-$out = & $csc /nologo /target:winexe /out:$launcherExe /optimize+ /win32manifest:$manifest (Join-Path $root 'packaging\launcher.cs') 2>&1
+$out = & $csc /nologo /target:winexe /out:$launcherExe /optimize+ /win32icon:$icon /win32manifest:$manifest (Join-Path $root 'packaging\launcher.cs') 2>&1
 if (-not (Test-Path $launcherExe)) {
   $out | ForEach-Object { Write-Host ('   ' + $_) -ForegroundColor Red }
   throw '启动器编译失败'
@@ -59,7 +60,7 @@ Write-Host ('   VoiceKeys.exe: ' + [math]::Round((Get-Item $launcherExe).Length 
 
 Write-Host '== 3.5/8 编译卸载器（约 10KB，替换原来 45MB 的自复制） ==' -ForegroundColor Cyan
 $uninstExe = Join-Path $payloadDir 'uninstall.exe'
-$out3 = & $csc /nologo /target:winexe /out:$uninstExe /optimize+ /win32manifest:$manifest (Join-Path $root 'packaging\uninstaller.cs') 2>&1
+$out3 = & $csc /nologo /target:winexe /out:$uninstExe /optimize+ /win32icon:$icon /win32manifest:$manifest (Join-Path $root 'packaging\uninstaller.cs') 2>&1
 if (-not (Test-Path $uninstExe)) {
   $out3 | ForEach-Object { Write-Host ('   ' + $_) -ForegroundColor Red }
   throw '卸载器编译失败'
@@ -72,7 +73,7 @@ Write-Host ('   payload: ' + [math]::Round((Get-Item $payloadZip).Length / 1MB, 
 
 Write-Host '== 5/8 编译安装器 ==' -ForegroundColor Cyan
 $setupExe = Join-Path $dist "VoiceKeys-Setup-$Version.exe"
-$out2 = & $csc /nologo /target:winexe /out:$setupExe /optimize+ /win32manifest:$manifest /resource:$payloadZip,payload.zip @csRefs (Join-Path $root 'packaging\setup.cs') 2>&1
+$out2 = & $csc /nologo /target:winexe /out:$setupExe /optimize+ /win32icon:$icon /win32manifest:$manifest /resource:$payloadZip,payload.zip @csRefs (Join-Path $root 'packaging\setup.cs') 2>&1
 if (-not (Test-Path $setupExe)) {
   $out2 | ForEach-Object { Write-Host ('   ' + $_) -ForegroundColor Red }
   throw '安装器编译失败'
