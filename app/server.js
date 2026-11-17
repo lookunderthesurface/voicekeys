@@ -559,17 +559,12 @@ function evaluateOnSilence(voice) {
     void fireWord(p.word);
     return;
   }
-  if (!p.out) return;                                     // M2 还没回，下一帧再试
+  // 门到期：把候选交给 pipeline.finish 统一裁决（句尾窗口 M2 打分 + 每词阈值 + 策略）
+  // 之前这里引用了不存在的 matcher → 所有走 M2 的候选在门到期时抛错失效，只有快速通道能响。
   state.pendingSilence = null;
-  if (p.out.timeout || p.out.error) return;
-  const scored = matcher.scoreAll(p.out.text || '', state.words.map((w) => ({ word: w.word, planKey: w.planKey })));
-  const v = require('./pipeline/policy').verdictFromScores({ candidate: p.cand.word, m1Score: Number(p.cand.score) || 0, m1How: p.cand.how, scored, thresholdOf: () => m2Threshold() });
-  if (v.action === 'fire' || v.action === 'swap') {
-    log('门到期执行：' + (v.word || p.word) + '（M2 ' + v.rule + '）');
-    void fireWord(v.word || p.word);
-  } else {
-    log('门到期放弃：' + p.word + '（M2 ' + v.rule + '）');
-  }
+  state.pendingConfirm = { word: p.word, candidate: p.cand, fast: false, ...p.handle };
+  log('门到期：' + p.word + '（交给 M2 裁决）');
+  void fireWord(p.word);
 }
 
 
