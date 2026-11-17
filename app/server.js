@@ -486,7 +486,6 @@ function handleAsrMessage(msg) {
   if (msg.final) {
     state.candHistory = [];
     state.lastStableKey = null;
-    state.firedThisUtterance = [];
     return;
   }
   // 候选判断已移到"逐帧评估"函数 evaluateCandidateGate 里
@@ -531,7 +530,6 @@ function evaluateOnSilence(voice) {
       voicedMs: recentVoicedMs(3000),
       wordMeta: wordMetaMap(),
     });
-    if (cand && !(Array.isArray(state.firedThisUtterance) && state.firedThisUtterance.includes(cand.word))) {
       const planEntry = planner.lookup(cand.word);
       const candIsHandy = Boolean(planEntry && planEntry.plan && Array.isArray(planEntry.plan.steps)
         && planEntry.plan.steps.some((s) => s.op === 'handy.set'));
@@ -668,8 +666,6 @@ async function confirmDecision(word) {
       m1How: pc.candidate ? pc.candidate.how : 'exact',
       verdict: 'fast-path', path: 'fast',
     });
-    if (!Array.isArray(state.firedThisUtterance)) state.firedThisUtterance = [];
-    state.firedThisUtterance.push(word);
     return { word, source: 'fast-path' };
   }
 
@@ -697,8 +693,6 @@ async function confirmDecision(word) {
     });
   }
 
-  if (!Array.isArray(state.firedThisUtterance)) state.firedThisUtterance = [];
-  if (verdict.action === 'fire' || verdict.action === 'swap') state.firedThisUtterance.push(verdict.word || word);
   if (verdict.action === 'fire') return { word: verdict.word || word, source: verdict.rule };
   if (verdict.action === 'swap') {
     capture.remarkWord(verdict.word);
