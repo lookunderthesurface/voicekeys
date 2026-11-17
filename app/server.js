@@ -510,12 +510,16 @@ function evaluateOnSilence(voice) {
   state.voiceHist.push(voice ? 1 : 0);
   if (state.voiceHist.length > VOICED_WINDOW_FRAMES) state.voiceHist.shift();
 
-  // 重新出声：重置"这一轮静音已经处理过"的标记
-  if (voice) { state.silenceDecided = false; return; }
-  if (state.silenceDecided) return;                       // 本轮静音已有结论
+  // 重新出声：开始新的一轮（重置尝试次数）
+  if (voice) { state.silenceTries = 0; state.silenceDecided = false; return; }
+  if (state.silenceDecided) return;
 
   const voiced = state.voiceHist.reduce((a, b) => a + b, 0);
-  if (voiced < VOICED_MIN_FRAMES) return;                 // 过去没怎么说话，不匹配
+  if (voiced < VOICED_MIN_FRAMES) return;                 // 过去没怎么说话
+
+  // 用户 2026-11-17：一轮静音最多尝试 3 次，避免反复问 M2 把机器拖卡
+  state.silenceTries = (state.silenceTries || 0) + 1;
+  if (state.silenceTries > 3) { state.silenceDecided = true; return; }
 
   const cand = pipeline.propose(state.asrText, {
     threshold: matchThreshold(),
@@ -523,9 +527,9 @@ function evaluateOnSilence(voice) {
     voicedMs: recentVoicedMs(3000),
     wordMeta: wordMetaMap(),
   });
-  if (!cand) return;                                      // 静音里继续等 ASR 补全文字
+  if (!cand) return;                                      // 等 ASR 补全（最多 3 次）
   if (Array.isArray(state.firedThisUtterance) && state.firedThisUtterance.includes(cand.word)) {
-    state.silenceDecided = true;                          // 本句已执行过这个词
+    state.silenceDecided = true;
     return;
   }
 
@@ -536,11 +540,10 @@ function evaluateOnSilence(voice) {
   state.silenceDecided = true;
   if (fast) {
     state.pendingConfirm = { word: cand.word, candidate: cand, fast: true, audio: null, promise: null };
-    log('静音帧匹配：' + cand.word + '（M1 ' + cand.score.toFixed(2) + '，静音 ' + (trigger && trigger.silenceBeforeFireMs != null ? trigger.silenceBeforeFireMs : '?') + 'ms）→ 自信，直接执行');
+    log('静音帧匹配：' + cand.word + '（M1 ' + cand.score.toFixed(2) + '）→ 自信，直接执行');
     void fireWord(cand.word);
     return;
   }
-  // 中间态：把最后 4 秒音频交给 M2
   const handle = pipeline.startConfirm();
   log('静音帧匹配：' + cand.word + '（M1 ' + cand.score.toFixed(2) + '）→ 问 M2，音频 ' + (handle.audio ? (handle.audio.length / 16000).toFixed(1) : 'none') + 's');
   state.pendingConfirm = { word: cand.word, candidate: cand, fast: false, ...handle };
@@ -711,7 +714,7 @@ async function fireWord(word) {
     state.lastResult = { word, at: Date.now(), ...out };
     pushEvent({ type: 'result', word, ok: out.ok, detail: summarize(out) });
     // 把执行结果写进日志：出问题（例如按空格打到别的窗口）才能事后定位
-    log('执行[' + word + ']: ' + summarize(out) + (out && out.note ? ' — ' + out.note : '') + (out && out.window ? ' 窗口「' + out.window + '」' : ''));
+    log('执行[' + word + ']: ' + summarize(out) + (out && out.execution && out.execution.results ? ' 明细 ' + JSON.stringify(out.execution.results).slice(0, 300) : ''));
   } catch (e) {
     state.lastResult = { word, ok: false, error: String(e && e.message) };
     pushEvent({ type: 'error', message: String(e && e.message) });
