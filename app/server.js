@@ -509,17 +509,15 @@ function evaluateOnSilence(voice) {
   state.voiceHist = state.voiceHist || [];
   state.voiceHist.push(voice ? 1 : 0);
   if (state.voiceHist.length > VOICED_WINDOW_FRAMES) state.voiceHist.shift();
+  const prevVoice = state.prevVoice === true;
+  state.prevVoice = voice;
 
-  // 重新出声：开始新的一轮（重置尝试次数）
-  if (voice) { state.silenceTries = 0; state.silenceDecided = false; return; }
-  if (state.silenceDecided) return;
-
+  if (voice) { state.matchWindow = 0; return; }              // 重新出声：关闭窗口
   const voiced = state.voiceHist.reduce((a, b) => a + b, 0);
-  if (voiced < VOICED_MIN_FRAMES) return;                 // 过去没怎么说话
-
-  // 用户 2026-11-17：一轮静音最多尝试 3 次，避免反复问 M2 把机器拖卡
-  state.silenceTries = (state.silenceTries || 0) + 1;
-  if (state.silenceTries > 3) { state.silenceDecided = true; return; }
+  // 下降沿（上一帧有声、这一帧静音）+ 过去 5 秒说过 ≥300ms → 打开 3 帧匹配窗口
+  if (prevVoice && voiced >= VOICED_MIN_FRAMES) state.matchWindow = 3;
+  if (!state.matchWindow) return;
+  state.matchWindow -= 1;
 
   const cand = pipeline.propose(state.asrText, {
     threshold: matchThreshold(),
@@ -527,17 +525,14 @@ function evaluateOnSilence(voice) {
     voicedMs: recentVoicedMs(3000),
     wordMeta: wordMetaMap(),
   });
-  if (!cand) return;                                      // 等 ASR 补全（最多 3 次）
-  if (Array.isArray(state.firedThisUtterance) && state.firedThisUtterance.includes(cand.word)) {
-    state.silenceDecided = true;
-    return;
-  }
+  if (!cand) return;                                          // 窗口内等 ASR 补完最后一个字
+  state.matchWindow = 0;
+  if (Array.isArray(state.firedThisUtterance) && state.firedThisUtterance.includes(cand.word)) return;
 
   const entry = planner.lookup(cand.word);
   const candIsHandy = Boolean(entry && entry.plan && Array.isArray(entry.plan.steps)
     && entry.plan.steps.some((s) => s.op === 'handy.set'));
   const fast = pipeline.policy.shouldFastPath({ score: cand.score, margin: cand.margin, isHandy: candIsHandy, voicedMs: recentVoicedMs(3000) });
-  state.silenceDecided = true;
   if (fast) {
     state.pendingConfirm = { word: cand.word, candidate: cand, fast: true, audio: null, promise: null };
     log('静音帧匹配：' + cand.word + '（M1 ' + cand.score.toFixed(2) + '）→ 自信，直接执行');
