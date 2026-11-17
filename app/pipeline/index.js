@@ -57,7 +57,7 @@ class Pipeline {
     const tailScore = (t, w) => {
       const Lw = String(w.word).length;
       let bestR = { score: 0, how: 'none' };
-      for (let k = Lw; k <= Math.min(t.length, Lw + 2); k += 1) {
+      for (let k = Math.min(Lw, t.length); k <= Math.min(t.length, Lw + 2); k += 1) {
         const seg = t.slice(t.length - k);
         const r = this.deps.m1.scoreAgainst(seg, w.word);
         if (r && r.score > bestR.score) bestR = r;
@@ -136,7 +136,7 @@ class Pipeline {
             return list.map((w) => {
               const Lw = String(w.word).length;
               let sc = 0; let how = 'none';
-              for (let k = Lw; k <= Math.min(src.length, Lw + 2); k += 1) {
+              for (let k = Math.min(Lw, src.length); k <= Math.min(src.length, Lw + 2); k += 1) {
                 const r = this.deps.m1.scoreAgainst(src.slice(src.length - k), w.word);
                 if (r && r.score > sc) { sc = r.score; how = r.how; }
               }

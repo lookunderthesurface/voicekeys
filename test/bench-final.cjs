@@ -21,7 +21,7 @@ const m2 = new sherpa.OfflineRecognizer({ featConfig: { sampleRate: SR, featureD
 function m2t(p) { const st = m2.createStream(); st.acceptWaveform({ sampleRate: SR, samples: p }); m2.decode(st); return (m2.getResult(st).text || '').trim(); }
 function tailScore(t, w) {
   const Lw = String(w).length; let sc = 0; let how = 'none';
-  for (let k = Lw; k <= Math.min(t.length, Lw + 2); k += 1) {
+  for (let k = Math.min(Lw, t.length); k <= Math.min(t.length, Lw + 2); k += 1) {
     const r = matcher.scoreAgainst(t.slice(t.length - k), w);
     if (r && r.score > sc) { sc = r.score; how = r.how; }
   }
