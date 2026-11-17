@@ -31,7 +31,7 @@ function propose(text) {
   return { word: best.word, score: best.score, how: best.how || 'loose', margin: Math.max(0, best.score - (all[1] ? all[1].score : 0)) };
 }
 function run(base) {
-  const buf = new Float32Array(base.length + Math.round((LEAD / 1000) * SR)); buf.set(base, Math.round((LEAD / 1000) * SR));
+  const tail = SR; const buf = new Float32Array(base.length + Math.round((LEAD / 1000) * SR) + tail); buf.set(base, Math.round((LEAD / 1000) * SR));
   const st = m1.createStream(); const hist = [];
   let lastVoiceIdx = 0; let matched = false; let pending = null; let idx = 0;
   for (let i = 0; i + FRAME <= buf.length; i += FRAME) {
@@ -83,7 +83,12 @@ function run(base) {
   const focus = rows.filter((x) => x.expected.includes('暂停视频'));
   console.log('\n=== 含「暂停视频」' + focus.length + ' 条 ===');
   for (const x of focus) console.log('  ' + x.f + ' 「' + x.tt + '」 → ' + (x.r.acted ? '执行「' + x.r.acted + '」[' + x.r.rule + '] M1=' + x.r.m1.score.toFixed(2) : '未执行'));
-  console.log('  正确 ' + focus.filter((x) => x.r.acted === '暂停视频' || samePlan(x.r.acted, '暂停视频')).length + '/' + focus.length);
+  const execPause = focus.filter((x) => x.r.acted === '暂停视频' || samePlan(x.r.acted, '暂停视频'));
+  const actedOther = focus.filter((x) => x.r.acted && !(x.r.acted === '暂停视频' || samePlan(x.r.acted, '暂停视频')));
+  const notActed = focus.filter((x) => !x.r.acted);
+  console.log('  执行了「暂停视频」: ' + execPause.length + '/' + focus.length);
+  console.log('  执行了别的关键词: ' + actedOther.length + (actedOther.length ? '（' + actedOther.map((x) => x.f + '→' + x.r.acted).join(', ') + '）' : ''));
+  console.log('  没执行: ' + notActed.length + (notActed.length ? '（' + notActed.map((x) => x.f).join(', ') + '）' : ''));
   const noKw = rows.filter((x) => x.expected.length === 0);
   const fps = noKw.filter((x) => x.r.acted);
   console.log('\n=== 老师无关键词 ' + noKw.length + ' 条 → 误触发 ' + fps.length + ' 条' + (fps.length ? '：' + fps.map((x) => x.f + '→' + x.r.acted).join(', ') : ''));
