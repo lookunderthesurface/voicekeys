@@ -25,10 +25,10 @@ function propose(text) {
   if (!text) return null;
   const em = matcher.matchAtEnd(text, words, { threshold: 0.7 });
   if (em && !em.ambiguous && em.score >= 0.7) return { word: em.word, score: em.score, how: em.how, margin: null };
-  const best = matcher.bestScore(text, words);
-  if (!best || best.score < policy.DEFAULT_POLICY.candidateFloor) return null;
   const all = matcher.scoreAll(text, words);
-  return { word: best.word, score: best.score, how: best.how || 'loose', margin: Math.max(0, best.score - (all[1] ? all[1].score : 0)) };
+  const b = all[0];
+  if (!b || b.score < 0.15) return null;
+  return { word: b.word, score: b.score, how: b.how || 'loose', margin: Math.max(0, b.score - (all[1] ? all[1].score : 0)) };
 }
 function run(base) {
   const tail = SR; const buf = new Float32Array(base.length + Math.round((LEAD / 1000) * SR) + tail); buf.set(base, Math.round((LEAD / 1000) * SR));
