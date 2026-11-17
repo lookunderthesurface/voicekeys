@@ -23,8 +23,9 @@ function defaults() {
     matchThreshold: 0.70,
     captureMax: 500,          // 采集上限（GUI 可改）
     captureAutoClean: true,
-    // 校准是实验功能：默认关闭（算法还在变，误用会改坏词表）
-    calibratorEnabled: false,
+    // 校准是实验功能：普通用户默认关闭（算法还在变，误用会改坏词表）。
+    // 开发者用 VK_DEV=1 启动（或 run-dev.cmd）时默认打开，方便我们自己调算法。
+    calibratorEnabled: process.env.VK_DEV === '1',
     // Handy 可执行文件路径；空 = 用 %LOCALAPPDATA%\Handy\handy.exe
     handyPath: '',   // 存满时自动删除废数据（GUI 可改）
     provider: 'ollama',
