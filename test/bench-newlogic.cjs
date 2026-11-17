@@ -71,7 +71,7 @@ function propose(text) {
 function judge(cand, m2txt) {
   return policy.verdictFromScores({
     candidate: cand.word, m1Score: Number(cand.score) || 0, m1How: cand.how,
-    scored: matcher.scoreAll(m2txt, words), thresholdOf: () => 0.7,
+    scored: matcher.scoreAll(m2txt, words), thresholdOf: () => Number(process.env.VK_M2_TH || 0.7),
   });
 }
 

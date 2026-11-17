@@ -250,6 +250,14 @@ const executor = new Executor();
 // 重启后把上次的复核报表读回内存，界面不用再跑一遍才能看到结果
 if (capture.report) state.lastReport = capture.report;
 
+// M2 复核阈值：打分是"比例值"（1.00 / 0.85 / 0.75 / 0.67 / 0.5…），
+// 0.70 落在 0.67 和 0.75 之间，等于把 0.67 一律挡掉（用户 2026-11-17 指出）。
+// 所以单独给 M2 一个阈值，默认 0.65，让 0.67 能通过；M1 侧仍用 matchThreshold。
+function m2Threshold() {
+  const v = Number(providers.load().m2Threshold);
+  return Number.isFinite(v) && v >= 0.3 && v <= 0.99 ? v : 0.65;
+}
+
 function matchThreshold() {
   const v = Number(providers.load().matchThreshold);
   return Number.isFinite(v) && v >= 0.3 && v <= 0.99 ? v : 0.70;
@@ -478,6 +486,7 @@ function handleAsrMessage(msg) {
   if (msg.final) {
     state.candHistory = [];
     state.lastStableKey = null;
+    state.firedThisUtterance = [];
     return;
   }
   // 候选判断已移到"逐帧评估"函数 evaluateCandidateGate 里
@@ -500,6 +509,8 @@ function evaluateCandidateGate() {
   const voicedMs = recentVoicedMs(3000);
   const cand = pipeline.propose(state.asrText, { threshold, words: wordList, voicedMs, wordMeta: wordMetaMap() });
 
+  // 同一句话里同一个词只执行一次（否则 toggle 类计划会被执行两次：播了又暂停）
+  if (cand && Array.isArray(state.firedThisUtterance) && state.firedThisUtterance.includes(cand.word)) return;
   const planEntry = cand ? planner.lookup(cand.word) : null;
   const candIsHandy = Boolean(planEntry && planEntry.plan && Array.isArray(planEntry.plan.steps)
     && planEntry.plan.steps.some((s) => s.op === 'handy.set'));
@@ -635,6 +646,8 @@ async function confirmDecision(word) {
       m1How: pc.candidate ? pc.candidate.how : 'exact',
       verdict: 'fast-path', path: 'fast',
     });
+    if (!Array.isArray(state.firedThisUtterance)) state.firedThisUtterance = [];
+    state.firedThisUtterance.push(word);
     return { word, source: 'fast-path' };
   }
 
@@ -645,7 +658,7 @@ async function confirmDecision(word) {
   const verdict = await pipeline.finish(
     pc.candidate || { word, score: 1, how: 'exact' },
     pc,
-    { threshold: matchThreshold(), isHandy, wordMeta: wordMetaMap() },
+    { threshold: m2Threshold(), isHandy, wordMeta: wordMetaMap() },
   );
 
   pushEvent({ type: 'confirm', word, reason: verdict.reason });
@@ -662,6 +675,8 @@ async function confirmDecision(word) {
     });
   }
 
+  if (!Array.isArray(state.firedThisUtterance)) state.firedThisUtterance = [];
+  if (verdict.action === 'fire' || verdict.action === 'swap') state.firedThisUtterance.push(verdict.word || word);
   if (verdict.action === 'fire') return { word: verdict.word || word, source: verdict.rule };
   if (verdict.action === 'swap') {
     capture.remarkWord(verdict.word);
