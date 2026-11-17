@@ -506,43 +506,71 @@ const VOICED_WINDOW_FRAMES = 50;    // 5 秒
 const VOICED_MIN_FRAMES = 3;        // 300ms
 
 function evaluateOnSilence(voice) {
+  state.frameIdx = (state.frameIdx || 0) + 1;
+  const idx = state.frameIdx;
   state.voiceHist = state.voiceHist || [];
   state.voiceHist.push(voice ? 1 : 0);
   if (state.voiceHist.length > VOICED_WINDOW_FRAMES) state.voiceHist.shift();
-  const prevVoice = state.prevVoice === true;
-  state.prevVoice = voice;
 
-  if (voice) { state.matchWindow = 0; return; }              // 重新出声：关闭窗口
-  const voiced = state.voiceHist.reduce((a, b) => a + b, 0);
-  // 下降沿（上一帧有声、这一帧静音）+ 过去 5 秒说过 ≥300ms → 打开 3 帧匹配窗口
-  if (prevVoice && voiced >= VOICED_MIN_FRAMES) state.matchWindow = 3;
-  if (!state.matchWindow) return;
-  state.matchWindow -= 1;
-
-  const cand = pipeline.propose(state.asrText, {
-    threshold: matchThreshold(),
-    words: state.words.map((w) => ({ word: w.word, planKey: w.planKey })),
-    voicedMs: recentVoicedMs(3000),
-    wordMeta: wordMetaMap(),
-  });
-  if (!cand) return;                                          // 窗口内等 ASR 补完最后一个字
-  state.matchWindow = 0;
-  if (Array.isArray(state.firedThisUtterance) && state.firedThisUtterance.includes(cand.word)) return;
-
-  const entry = planner.lookup(cand.word);
-  const candIsHandy = Boolean(entry && entry.plan && Array.isArray(entry.plan.steps)
-    && entry.plan.steps.some((s) => s.op === 'handy.set'));
-  const fast = pipeline.policy.shouldFastPath({ score: cand.score, margin: cand.margin, isHandy: candIsHandy, voicedMs: recentVoicedMs(3000) });
-  if (fast) {
-    state.pendingConfirm = { word: cand.word, candidate: cand, fast: true, audio: null, promise: null };
-    log('静音帧匹配：' + cand.word + '（M1 ' + cand.score.toFixed(2) + '）→ 自信，直接执行');
-    void fireWord(cand.word);
+  if (voice) {
+    state.lastVoiceIdx = idx;
+    state.matchedThisBurst = false;
+    if (state.pendingSilence) { log('静音门口内又出声，取消: ' + state.pendingSilence.word); state.pendingSilence = null; }
     return;
   }
-  const handle = pipeline.startConfirm();
-  log('静音帧匹配：' + cand.word + '（M1 ' + cand.score.toFixed(2) + '）→ 问 M2，音频 ' + (handle.audio ? (handle.audio.length / 16000).toFixed(1) : 'none') + 's');
-  state.pendingConfirm = { word: cand.word, candidate: cand, fast: false, ...handle };
-  void fireWord(cand.word);
+  if (!state.lastVoiceIdx) return;
+  const silentRun = idx - state.lastVoiceIdx;            // 已经连续静音几帧
+  const voiced = state.voiceHist.reduce((a, b) => a + b, 0);
+
+  // ② 最近三帧静音 + 过去 5 秒说过 ≥300ms → 执行一次 M1 匹配（每句话一次）
+  if (!state.matchedThisBurst && silentRun >= 3 && voiced >= VOICED_MIN_FRAMES) {
+    state.matchedThisBurst = true;
+    const cand = pipeline.propose(state.asrText, {
+      threshold: matchThreshold(),
+      words: state.words.map((w) => ({ word: w.word, planKey: w.planKey })),
+      voicedMs: recentVoicedMs(3000),
+      wordMeta: wordMetaMap(),
+    });
+    if (cand && !(Array.isArray(state.firedThisUtterance) && state.firedThisUtterance.includes(cand.word))) {
+      const planEntry = planner.lookup(cand.word);
+      const candIsHandy = Boolean(planEntry && planEntry.plan && Array.isArray(planEntry.plan.steps)
+        && planEntry.plan.steps.some((s) => s.op === 'handy.set'));
+      const fast = pipeline.policy.shouldFastPath({ score: cand.score, margin: cand.margin, isHandy: candIsHandy, voicedMs: recentVoicedMs(3000) });
+      // 600ms 静音门从最后一个有声帧开始计时 → 第 6 个静音帧到期
+      const fireAt = state.lastVoiceIdx + 6;
+      if (fast) {
+        state.pendingSilence = { word: cand.word, kind: 'fast', cand, fireAt };
+        log('匹配（静音3帧）：' + cand.word + '（M1 ' + cand.score.toFixed(2) + '）→ 自信，等门到期执行');
+      } else {
+        const handle = pipeline.startConfirm();
+        state.pendingSilence = { word: cand.word, kind: 'm2', cand, fireAt, handle, out: null };
+        log('匹配（静音3帧）：' + cand.word + '（M1 ' + cand.score.toFixed(2) + '）→ 问 M2，音频 ' + (handle.audio ? (handle.audio.length / 16000).toFixed(1) : 'none') + 's');
+        if (handle.promise) { handle.promise.then((out2) => { if (state.pendingSilence && state.pendingSilence.handle === handle) state.pendingSilence.out = out2; }).catch(() => {}); }
+      }
+    }
+  }
+
+  // ③ 门到期：从最后一个有声帧起满 600ms → 执行或放弃
+  const p = state.pendingSilence;
+  if (!p || idx < p.fireAt) return;
+  if (p.kind === 'fast') {
+    state.pendingSilence = null;
+    state.pendingConfirm = { word: p.word, candidate: p.cand, fast: true, audio: null, promise: null };
+    log('门到期执行：' + p.word + '（自信）');
+    void fireWord(p.word);
+    return;
+  }
+  if (!p.out) return;                                     // M2 还没回，下一帧再试
+  state.pendingSilence = null;
+  if (p.out.timeout || p.out.error) return;
+  const scored = matcher.scoreAll(p.out.text || '', state.words.map((w) => ({ word: w.word, planKey: w.planKey })));
+  const v = require('./pipeline/policy').verdictFromScores({ candidate: p.cand.word, m1Score: Number(p.cand.score) || 0, m1How: p.cand.how, scored, thresholdOf: () => m2Threshold() });
+  if (v.action === 'fire' || v.action === 'swap') {
+    log('门到期执行：' + (v.word || p.word) + '（M2 ' + v.rule + '）');
+    void fireWord(v.word || p.word);
+  } else {
+    log('门到期放弃：' + p.word + '（M2 ' + v.rule + '）');
+  }
 }
 
 
