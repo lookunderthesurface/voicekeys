@@ -525,6 +525,10 @@ function evaluateCandidateGate() {
   const stable = state.candHistory.length === 2 && state.candHistory[0] === state.candHistory[1];
   if (!stable) { state.lastStableKey = null; return; }
   if (state.lastStableKey === key) return;   // 这次稳定已经处理过
+  // 用户 2026-11-17：几帧之内不可能说出两个关键词 → 门内只允许一个候选，
+  // 别的词等这道门结算完再说（否则会出现一句话里两次执行、播放又被暂停）。
+  if (trigger && trigger.pending) return;
+
   state.lastStableKey = key;
 
   if (!cand) {
