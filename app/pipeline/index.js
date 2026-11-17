@@ -52,13 +52,22 @@ class Pipeline {
       };
     }
 
-    // 用户 2026-11-17：M1 = 对所有关键词打分，最高分就是候选。必须用滑窗 scoreAll；
-    // bestScore 是整句打分，文本比词长（>词长+3）时撞长度护栏返回 0，会漏掉长句结尾的词。
-    const all = (typeof this.deps.m1.scoreAll === 'function')
-      ? this.deps.m1.scoreAll(text, list)
-      : (() => { const b = this.deps.m1.bestScore(text, list); return b ? [{ word: b.word, score: b.score, how: b.how }] : []; })();
+    // 定案（2026-11-17）：匹配发生在静音门起点之后，只能看这道门之前刚说的那段文本。
+    // 每个词只用文本末尾 L..L+2 个字的窗口打分（句尾窗口），不从句子中间挑词。
+    const tailScore = (t, w) => {
+      const Lw = String(w.word).length;
+      let bestR = { score: 0, how: 'none' };
+      for (let k = Lw; k <= Math.min(t.length, Lw + 2); k += 1) {
+        const seg = t.slice(t.length - k);
+        const r = this.deps.m1.scoreAgainst(seg, w.word);
+        if (r && r.score > bestR.score) bestR = r;
+      }
+      return bestR;
+    };
+    const all = list.map((w) => ({ word: w.word, ...tailScore(text, w) }))
+      .sort((a, b) => b.score - a.score);
     const best = all[0] || null;
-    const verdict = { propose: Boolean(best && best.score >= policy.DEFAULT_POLICY.candidateFloor), reason: 'scoreAll' };
+    const verdict = { propose: Boolean(best && best.score >= policy.DEFAULT_POLICY.candidateFloor), reason: 'tail-window' };
     if (!verdict.propose) return null;   // M1 判"否" → 直接丢，不打扰 M2
 
     const mLoose = marginOf(text);
