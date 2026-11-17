@@ -52,6 +52,40 @@ function similarity(a, b) {
   return Math.max(0, 1 - d / Math.max(a.length, b.length));
 }
 
+/** 把一个拼音音节拆成 声母+韵母 */
+function splitSyllable(s) {
+  const m = /^(zh|ch|sh|b|p|m|f|d|t|n|l|g|k|h|j|q|x|r|z|c|s|y|w)?([a-z]+)$/.exec(String(s));
+  if (!m) return { initial: '', final: String(s) };
+  return { initial: m[1] || '', final: m[2] || String(s) };
+}
+
+/** 两个音节的部分相似度（0~1） */
+function syllableSim(a, b) {
+  if (a === b) return 1;
+  const A = splitSyllable(a); const B = splitSyllable(b);
+  if (A.final === B.final) return A.initial === B.initial ? 1 : 0.85;   // 韵母一样、声母不同（zh/z）
+  if (A.initial === B.initial && A.initial) return 0.5;                    // 声母一样、韵母不同
+  if (A.final && B.final && (A.final.endsWith(B.final) || B.final.endsWith(A.final))) return 0.35; // 韵母部分重叠 hao/o
+  return 0;
+}
+
+/** 带"部分相似"代价的拼音序列相似度 */
+function pinyinSimilarity(a, b) {
+  if (!a.length && !b.length) return 1;
+  if (!a.length || !b.length) return 0;
+  const n = a.length; const m = b.length;
+  const dp = Array.from({ length: n + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= m; j += 1) dp[0][j] = j;
+  for (let i = 1; i <= n; i += 1) {
+    for (let j = 1; j <= m; j += 1) {
+      const cost = 1 - syllableSim(a[i - 1], b[j - 1]);
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  // 音节数不同要打折：3 音节的「定视频」不能因为部分相似就够到 4 音节的「暂停视频」
+  return Math.max(0, (1 - dp[n][m] / Math.max(n, m)) * (Math.min(n, m) / Math.max(n, m)));
+}
+
 /**
  * 整句匹配一个关键词，返回相似度 0~1。
  * 两种度量取较大值：字形相似度、拼音音节相似度。
@@ -74,7 +108,7 @@ function scoreAgainst(text, word) {
   }
 
   const charSim = similarity(t.split(''), w.split(''));
-  const pySim = similarity(toPinyin(t), toPinyin(w));
+  const pySim = pinyinSimilarity(toPinyin(t), toPinyin(w));
   const score = Math.max(charSim, pySim);
   return { score, how: pySim >= charSim ? 'pinyin' : 'char', charSim, pySim };
 }
