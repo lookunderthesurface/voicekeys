@@ -500,55 +500,51 @@ const asrPrequeue = [];
 
 // 每 100ms 音频帧评估一次：连续两帧同一结论（都不是 / 非常自信 / 可能是）才行动。
 // 用户 2026-11-17：一帧就判断会在词没说完时提前匹配，必须等连续两帧。
-function evaluateCandidateGate() {
-  if (!state.asrText) return;
-  const words = state.words.map((w) => ({ word: w.word, planKey: w.planKey }));
-  if (!words.length) return;
-  const threshold = matchThreshold();
-  const wordList = state.words.map((w) => ({ word: w.word, planKey: w.planKey }));
-  const voicedMs = recentVoicedMs(3000);
-  const cand = pipeline.propose(state.asrText, { threshold, words: wordList, voicedMs, wordMeta: wordMetaMap() });
+// 用户 2026-11-17 新算法：只在"过去 4~5 秒有音量 >300ms 且当前帧静音"时执行匹配。
+const VOICE_RMS = 0.02;             // 与 trigger 一致的"有音量"门限
+const VOICED_WINDOW_FRAMES = 50;    // 5 秒
+const VOICED_MIN_FRAMES = 3;        // 300ms
 
-  // 同一句话里同一个词只执行一次（否则 toggle 类计划会被执行两次：播了又暂停）
-  if (cand && Array.isArray(state.firedThisUtterance) && state.firedThisUtterance.includes(cand.word)) return;
-  const planEntry = cand ? planner.lookup(cand.word) : null;
-  const candIsHandy = Boolean(planEntry && planEntry.plan && Array.isArray(planEntry.plan.steps)
-    && planEntry.plan.steps.some((s) => s.op === 'handy.set'));
-  const kind = !cand ? 'none'
-    : pipeline.policy.shouldFastPath({ score: cand.score, margin: cand.margin, isHandy: candIsHandy, voicedMs }) ? 'confident'
-      : 'possible';
-  const key = kind + '|' + (cand ? cand.word : '');
+function evaluateOnSilence(voice) {
+  state.voiceHist = state.voiceHist || [];
+  state.voiceHist.push(voice ? 1 : 0);
+  if (state.voiceHist.length > VOICED_WINDOW_FRAMES) state.voiceHist.shift();
 
-  state.candHistory = state.candHistory || [];
-  state.candHistory.push(key);
-  if (state.candHistory.length > 2) state.candHistory.shift();
-  const stable = state.candHistory.length === 2 && state.candHistory[0] === state.candHistory[1];
-  if (!stable) { state.lastStableKey = null; return; }
-  if (state.lastStableKey === key) return;   // 这次稳定已经处理过
-  state.lastStableKey = key;
+  // 重新出声：重置"这一轮静音已经处理过"的标记
+  if (voice) { state.silenceDecided = false; return; }
+  if (state.silenceDecided) return;                       // 本轮静音已有结论
 
-  if (!cand) {
-    candidate.invalidate('文本已变化');
+  const voiced = state.voiceHist.reduce((a, b) => a + b, 0);
+  if (voiced < VOICED_MIN_FRAMES) return;                 // 过去没怎么说话，不匹配
+
+  const cand = pipeline.propose(state.asrText, {
+    threshold: matchThreshold(),
+    words: state.words.map((w) => ({ word: w.word, planKey: w.planKey })),
+    voicedMs: recentVoicedMs(3000),
+    wordMeta: wordMetaMap(),
+  });
+  if (!cand) return;                                      // 静音里继续等 ASR 补全文字
+  if (Array.isArray(state.firedThisUtterance) && state.firedThisUtterance.includes(cand.word)) {
+    state.silenceDecided = true;                          // 本句已执行过这个词
     return;
   }
 
-  if (!state.pendingConfirm || state.pendingConfirm.word !== cand.word) {
-    if (kind === 'confident') {
-      state.pendingConfirm = { word: cand.word, candidate: cand, fast: true, audio: null, promise: null };
-      log('快速通道: ' + cand.word + '（两帧稳定，M1 ' + cand.score.toFixed(2) + '，领先 ' + (cand.margin == null ? '?' : cand.margin.toFixed(2)) + '，跳过 M2）');
-    } else {
-      const h = pipeline.startConfirm();
-      const audioSec = h.audio ? (h.audio.length / 16000).toFixed(1) : 'none';
-      log('两帧稳定：候选 ' + cand.word + '（M1 ' + cand.score.toFixed(2) + '）→ 问 M2，音频 ' + audioSec + 's');
-      state.pendingConfirm = { word: cand.word, candidate: cand, fast: false, ...h };
-    }
+  const entry = planner.lookup(cand.word);
+  const candIsHandy = Boolean(entry && entry.plan && Array.isArray(entry.plan.steps)
+    && entry.plan.steps.some((s) => s.op === 'handy.set'));
+  const fast = pipeline.policy.shouldFastPath({ score: cand.score, margin: cand.margin, isHandy: candIsHandy, voicedMs: recentVoicedMs(3000) });
+  state.silenceDecided = true;
+  if (fast) {
+    state.pendingConfirm = { word: cand.word, candidate: cand, fast: true, audio: null, promise: null };
+    log('静音帧匹配：' + cand.word + '（M1 ' + cand.score.toFixed(2) + '，静音 ' + (trigger && trigger.silenceBeforeFireMs != null ? trigger.silenceBeforeFireMs : '?') + 'ms）→ 自信，直接执行');
+    void fireWord(cand.word);
+    return;
   }
-  candidate.update(state.asrText, { word: cand.word, score: cand.score, how: cand.how });
-  if (!(trigger && trigger.pending)) {
-    if (trigger) trigger.queue(cand.word);
-    log('门开始计时：M2 已加载 ' + (m2PreloadAt ? (Date.now() - m2PreloadAt) : 0) + 'ms，已稳定两帧');
-    capture.markFired(cand.word, state.asrText);
-  }
+  // 中间态：把最后 4 秒音频交给 M2
+  const handle = pipeline.startConfirm();
+  log('静音帧匹配：' + cand.word + '（M1 ' + cand.score.toFixed(2) + '）→ 问 M2，音频 ' + (handle.audio ? (handle.audio.length / 16000).toFixed(1) : 'none') + 's');
+  state.pendingConfirm = { word: cand.word, candidate: cand, fast: false, ...handle };
+  void fireWord(cand.word);
 }
 
 
@@ -822,7 +818,7 @@ async function startLoop() {
         try { capture.pushFrame(frame, rms); } catch { /* ignore */ }
         try { pushAudioRing(frame, rms); } catch { /* ignore */ }   // 供确认模型使用，不受切句影响
         try { feedAsr(frame); } catch (e) { if (!state.asrError) { state.asrError = e.message; log('喂 ASR 失败: ' + e.message); } }
-        try { evaluateCandidateGate(); } catch (e) { if (!state.gateError) { state.gateError = e.message; log('两帧评估失败: ' + e.message); } }
+        try { evaluateOnSilence(rms > 0.02); } catch (e) { if (!state.gateError) { state.gateError = e.message; log('静音帧匹配失败: ' + e.message); } }
       }
       if (state.mode === 'recording') {
         for (let i = 0; i < frame.length; i += 1) state.takeSamples.push(frame[i]);
