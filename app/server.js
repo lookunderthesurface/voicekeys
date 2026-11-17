@@ -123,7 +123,7 @@ function captureAfterFire(word, extra) {
   }, CAPTURE_TAIL_MS);
   t.unref?.();
 }
-const AUDIO_RING_FRAMES = 70;          // 70 × 100ms = 7 秒（6 秒素材 + 触发后 1 秒的余量）
+const AUDIO_RING_FRAMES = 60;          // 60 × 100ms = 6 秒（用户 2026-11-17：素材 6 秒，不需要 7 秒）
 const AUDIO_RING = [];
 const AUDIO_RMS = [];       // 与 AUDIO_RING 对齐的音量历史
 const AUDIO_RING_AT = [];   // 与 AUDIO_RING 对齐的墙钟时间戳（ms）
@@ -230,7 +230,7 @@ const pipeline = new Pipeline({
   m2: { confirm: (audio) => confirmer.confirm(audio, 3000) },
   capture,
   log: (m) => log(m),
-  audio: () => recentAudio(2500),   // 给 M2 的窗口：2.5 秒足够包含当前这个词
+  audio: () => recentAudio(4000),   // 给 M2 的窗口：最后 4 秒（用户 2026-11-17：等两帧后词已完整，不用补）
   words: () => state.words.map((w) => ({ word: w.word, planKey: w.planKey })),
   // 唤醒/结束词集合：策略用它禁止"把唤醒词改判成结束词"这类错动作
   handyWords: () => {
@@ -475,7 +475,10 @@ function handleAsrMessage(msg) {
 
 
   // 一句话结束：素材改为"按判定记录"（见 confirmDecision 里的 recordDecision），这里只做收尾
-  if (msg.final) return;
+  if (msg.final) {
+    state.candHistory = [];
+    return;
+  }
   const words = state.words.map((w) => ({ word: w.word, planKey: w.planKey }));
   if (!words.length || !state.asrText) return;
   // 只认"整句话以它结尾"的词：这样「静音门的时间里面」不会被当成「静音」
@@ -485,6 +488,24 @@ function handleAsrMessage(msg) {
   const wordList = state.words.map((w) => ({ word: w.word, planKey: w.planKey }));
   const voicedMs = recentVoicedMs(3000);
   const cand = pipeline.propose(state.asrText, { threshold, words: wordList, voicedMs, wordMeta: wordMetaMap() });
+
+  // ===== 用户 2026-11-17：必须"连续两帧得到同一结论"才进入后面的判断 =====
+  // 一帧就判断会在词还没说完时提前匹配（分数必然落在 0.6~0.85 的不确定带），
+  // 要求连续两次更新给出同一类结论：都不是 / 都非常自信 / 都是可能。
+  {
+    const candEntry = cand ? planner.lookup(cand.word) : null;
+    const candIsHandy = Boolean(candEntry && candEntry.plan && Array.isArray(candEntry.plan.steps)
+      && candEntry.plan.steps.some((s) => s.op === 'handy.set'));
+    const kind = !cand ? 'none'
+      : pipeline.policy.shouldFastPath({ score: cand.score, margin: cand.margin, isHandy: candIsHandy, voicedMs }) ? 'confident'
+        : 'possible';
+    const key = kind + '|' + (cand ? cand.word : '');
+    state.candHistory = state.candHistory || [];
+    state.candHistory.push(key);
+    if (state.candHistory.length > 2) state.candHistory.shift();
+    const stable = state.candHistory.length === 2 && state.candHistory[0] === state.candHistory[1];
+    if (!stable) return;   // 只有一帧结论：不排队、不问 M2、不取消，等下一帧
+  }
 
   if (!cand) {
     candidate.invalidate('文本已变化');
@@ -637,9 +658,7 @@ async function confirmDecision(word) {
   const verdict = await pipeline.finish(
     pc.candidate || { word, score: 1, how: 'exact' },
     pc,
-    { threshold: matchThreshold(), isHandy, wordMeta: wordMetaMap(), retryAudio: () => {
-      return recentAudio(3000);   // 门到期时的完整窗口
-    }, },
+    { threshold: matchThreshold(), isHandy, wordMeta: wordMetaMap() },
   );
 
   pushEvent({ type: 'confirm', word, reason: verdict.reason });
