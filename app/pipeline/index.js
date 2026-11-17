@@ -99,13 +99,14 @@ class Pipeline {
       return text ? fn.call(this.deps.m1, text, list, { threshold: minThreshold }) : null;
     };
 
+    const list = this.deps.words();
     let v = null;   // verdictFromScores 的结论（M2 无结果时保持 null）
     let m2 = { usable: false, word: null, text: '', ms: null };
     if (handle && handle.promise) {
       try {
         const out = await handle.promise;
         if (out && !out.timeout && !out.error) {
-          const list = this.deps.words();
+
           // 先用"所有 m2 阈值里最低的那个"去匹配，避免某个词阈值低而漏掉候选；
           // 再按该词自己的 m2 阈值筛一遍（阈值来自 Calibrator 的每词设置）。
           let minM2 = threshold;
@@ -138,6 +139,53 @@ class Pipeline {
         // 表现是"M2 无结果"，查了很久才定位。现在记下来。
         if (this.deps.log) this.deps.log('M2 裁决出错: ' + (e && e.message));
         else console.error('[pipeline] M2 裁决出错: ' + (e && e.message));
+      }
+    }
+
+    // 第一次 M2 用的是"候选出现那一刻"的音频；如果词的尾巴还没进缓冲区，
+    // M2 会只听到半个词（例如「听我说」→「我说」0.67 分）→ 被误判"证据不足"。
+    // 门到期时整段音频已完整，用它复听一次，只在"第一次判否且像是被切掉尾巴"时触发。
+    if (v && v.action === 'drop' && typeof retryAudio === 'function') {
+      const clean = (s) => String(s || '').replace(/[\s，。、！？,.!?]/g, '');
+      const m2text = m2.text || '';
+      const truncated = m2text.length > 0 && clean(m2text).length < clean(candidate.word).length;
+      const similarLength = m2text.length > 0 && Math.abs(clean(m2text).length - clean(candidate.word).length) <= 1;
+      if (truncated || similarLength) {
+        try {
+          const audio2 = retryAudio();
+          if (audio2 && audio2.length > 1600) {
+            const out2 = await this.deps.m2.confirm(audio2, 3000);
+            if (out2 && !out2.timeout && !out2.error) {
+              const scored2 = this.deps.m1.scoreAll(out2.text || '', list);
+              const v2 = policy.verdictFromScores({
+                candidate: candidate.word,
+                m1Score: candidate.score,
+                m1How: candidate.how,
+                scored: scored2,
+                thresholdOf: (w) => m2ThresholdOf(w),
+              });
+              const tag = '门到期复听（第一次「' + m2text + '」→ ' + (v && v.why ? v.why : 'drop') + '）';
+              if (v2.action !== 'drop') {
+                v = v2;
+                m2 = {
+                  usable: true,
+                  text: out2.text || '',
+                  word: v2.action === 'fire' || v2.action === 'swap' ? v2.word : null,
+                  ms: out2.ms || null,
+                  decision: v2,
+                  top1: scored2[0] ? scored2[0].word : null,
+                  top1Score: scored2[0] ? scored2[0].score : 0,
+                  retried: true,
+                };
+                if (this.deps.log) this.deps.log(tag + ' → 改判为「' + (v2.word || v2.action) + '」');
+              } else if (this.deps.log) {
+                this.deps.log(tag + ' → 复听仍判否（M2「' + (out2.text || '') + '」）');
+              }
+            }
+          }
+        } catch (e) {
+          if (this.deps.log) this.deps.log('M2 复听出错: ' + (e && e.message));
+        }
       }
     }
 
