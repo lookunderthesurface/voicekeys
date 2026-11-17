@@ -306,7 +306,7 @@ function pushEvent(evt) {
   }
   if (evt.type === 'drop') log('丢弃: ' + evt.word + '（' + evt.reason + '）');
   if (evt.type === 'heard') log('听到: ' + evt.word);
-  if (evt.type === 'confirm') log('确认[' + evt.word + ']: ' + evt.reason);
+  if (evt.type === 'confirm') log('确认[' + evt.word + ']: ' + evt.reason + (evt.m2 && evt.m2.text ? '  M2「' + evt.m2.text + '」' + (evt.m2.top1 ? '  top1=' + evt.m2.top1 + ':' + Number(evt.m2.top1Score || 0).toFixed(2) : '') : ''));
 }
 
 // ---------------------------------------------------------------- 关键词与阈值
@@ -675,10 +675,7 @@ async function confirmDecision(word) {
     { threshold: m2Threshold(), isHandy, wordMeta: wordMetaMap() },
   );
 
-  pushEvent({ type: 'confirm', word, reason: verdict.reason });
-  if (verdict.m2 && verdict.m2.text) {
-    log('确认[' + word + ']: ' + verdict.reason + '  M2「' + verdict.m2.text + '」' + (verdict.m2.top1 ? '  top1=' + verdict.m2.top1 + ':' + Number(verdict.m2.top1Score || 0).toFixed(2) : ''));
-  }
+  pushEvent({ type: 'confirm', word, reason: verdict.reason, m2: verdict.m2 });
 
   // 素材②：只在"真的要执行"时录（M2 否决的、以及被新文字取消的都不占素材名额）
   if (verdict.action === 'fire' || verdict.action === 'swap') {
