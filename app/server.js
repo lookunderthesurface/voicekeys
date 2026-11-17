@@ -482,31 +482,6 @@ function handleAsrMessage(msg) {
   }
   // 候选判断已移到"逐帧评估"函数 evaluateCandidateGate 里
 
-  // 候选成立：先判要不要走"快速通道"（M1 够自信就不叫 M2）
-  if (!state.pendingConfirm || state.pendingConfirm.word !== cand.word) {
-    const planEntry = cand.word ? planner.lookup(cand.word) : null;
-    const candIsHandy = Boolean(planEntry && planEntry.plan && Array.isArray(planEntry.plan.steps)
-      && planEntry.plan.steps.some((s) => s.op === 'handy.set'));
-    const fast = pipeline.policy.shouldFastPath({ score: cand.score, margin: cand.margin, isHandy: candIsHandy, voicedMs });
-    if (fast) {
-      state.pendingConfirm = { word: cand.word, candidate: cand, fast: true, audio: null, promise: null };
-      log('快速通道: ' + cand.word + '（M1 ' + cand.score.toFixed(2) + '，领先 ' + (cand.margin == null ? '?' : cand.margin.toFixed(2)) + '，跳过 M2）');
-    } else {
-      const h = pipeline.startConfirm();
-      if (process.env.VK_DEBUG_AUDIO) log('[dbg] 候选 ' + cand.word + ' 音频 ' + (h.audio ? (h.audio.length / 16000).toFixed(2) : 'null') + 's promise=' + Boolean(h.promise));
-      state.pendingConfirm = { word: cand.word, candidate: cand, fast: false, ...h };
-    }
-  }
-  candidate.update(state.asrText, { word: cand.word, score: cand.score, how: cand.how });
-  // 用户 2026-11-16 明确：不需要"同一个词 2.5 秒内不重复"的去重
-  // （他要是 2.5 秒内说两遍，那是他自己的事，不该被程序拦住）
-  {
-    if (!(trigger && trigger.pending)) {
-      if (trigger) trigger.queue(cand.word);
-      log('门开始计时：M2 已加载 ' + (m2PreloadAt ? (Date.now() - m2PreloadAt) : 0) + 'ms' + (m2PreloadAt ? '' : '（未预热）'));
-      capture.markFired(cand.word, state.asrText);
-    }
-  }
 }
 
 // ASR 模型要 ~0.9 秒加载；这期间的音频先攒着（上限 100 帧 = 10 秒），就绪后一次性灌进去。
