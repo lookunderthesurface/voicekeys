@@ -129,9 +129,21 @@ class Pipeline {
           }
           // 裁决逻辑统一放在 policy.verdictFromScores（纯函数）：
           // 运行时和离线 A/B 用同一份代码，避免"测的和跑的不一样"。
-          const scored = (typeof this.deps.m1.scoreAll === 'function')
-            ? this.deps.m1.scoreAll(out.text || '', list)
-            : (() => { const b = m2MatchOf(out.text, list, 0); return b ? [{ word: b.word, score: b.score }] : []; })();
+          // 用户 2026-11-17：M2 也只对'它转录的结尾'做匹配（句尾窗口），不从整句中间挑词；
+          // 否则句中被提到的词会被 m2-decides 抢过来执行（seg-0056 误触发）。
+          const tailScored = (txt) => {
+            const src = String(txt || '');
+            return list.map((w) => {
+              const Lw = String(w.word).length;
+              let sc = 0; let how = 'none';
+              for (let k = Lw; k <= Math.min(src.length, Lw + 2); k += 1) {
+                const r = this.deps.m1.scoreAgainst(src.slice(src.length - k), w.word);
+                if (r && r.score > sc) { sc = r.score; how = r.how; }
+              }
+              return { word: w.word, score: sc, how };
+            }).sort((a, b) => b.score - a.score);
+          };
+          const scored = tailScored(out.text);
           v = policy.verdictFromScores({
             candidate: candidate.word,
             m1Score: candidate.score,

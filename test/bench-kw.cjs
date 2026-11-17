@@ -66,7 +66,16 @@ function run(base) {
     if (pending && idx >= pending.fireAt) {
       const p = pending; pending = null;
       if (p.kind === 'fast') return { acted: p.cand.word, rule: 'fast', m1: p.cand };
-      const scored = matcher.scoreAll(p.m2, words);
+      const m2s = String(p.m2 || '');
+      const tsc = (w) => {
+        const Lw = String(w).length; let sc = 0;
+        for (let k = Lw; k <= Math.min(m2s.length, Lw + 2); k += 1) {
+          const r = matcher.scoreAgainst(m2s.slice(m2s.length - k), w);
+          if (r && r.score > sc) sc = r.score;
+        }
+        return sc;
+      };
+      const scored = words.map((w) => ({ word: w.word, score: tsc(w.word) })).sort((a, b) => b.score - a.score);
       const v = policy.verdictFromScores({ candidate: p.cand.word, m1Score: Number(p.cand.score) || 0, m1How: p.cand.how, scored, thresholdOf: () => 0.7 });
       const acted = (v.action === 'fire' || v.action === 'swap') ? v.word : null;
       return { acted, rule: v.rule, m1: p.cand, m2: p.m2, m2top: scored[0] };
