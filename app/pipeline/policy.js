@@ -193,6 +193,14 @@ function verdictFromScores(input) {
     return { action: 'drop', rule: 'm2-weak-other',
       why: 'M2 听到「' + top1.word + '」但分数不够（' + top1.score.toFixed(2) + '）' };
   }
+  // 2026-11-19 误触发事故：M2 在无关长句里模糊匹配到「大肥鱼」0.73（阈值 0.7）就改判执行。
+  // 约束：改判要么和候选词共享至少 2 字音节连续片段，要么比阈值高出足够多（>=0.15）。
+  const overThreshold = top1.score - th(top1.word);
+  if (!sharesRun(cand, top1.word, 2) && overThreshold < 0.15) {
+    return { action: 'drop', rule: 'm2-swap-weak',
+      why: 'M2 听到「' + top1.word + '」但只是勉强过阈值（' + top1.score.toFixed(2) + '），和候选「' + cand + '」不共享音节，不敢改判' };
+  }
+
   return { action: 'swap', word: top1.word, rule: 'm2-decides',
     why: 'M2 判定为「' + top1.word + '」（候选「' + cand + '」）' };
 }

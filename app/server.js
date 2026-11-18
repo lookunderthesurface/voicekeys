@@ -700,6 +700,8 @@ async function confirmDecision(word) {
 }
 
 
+const WORD_COOLDOWN_MS = Number(process.env.VK_WORD_COOLDOWN_MS || 2500);
+
 async function fireWord(word) {
   // 两个模型的协同点：非流式模型在门内重听这段音频，它的结论优先
   const decided = await confirmDecision(word);
@@ -708,6 +710,13 @@ async function fireWord(word) {
     return;
   }
   word = decided.word;
+  // 同词冷却：电视/对话里同一句话反复出现时，避免连续重复触发（2026-11-19 误触发事故）
+  const fireAt = Date.now();
+  if (state.lastFire && state.lastFire.word === word && fireAt - state.lastFire.at < WORD_COOLDOWN_MS) {
+    log('冷却：' + word + '（' + (fireAt - state.lastFire.at) + 'ms 内重复，忽略）');
+    return;
+  }
+  state.lastFire = { word, at: fireAt };
   pushEvent({ type: 'fire', word });
 
   const entry = planner.lookup(word);
