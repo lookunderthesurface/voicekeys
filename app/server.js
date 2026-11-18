@@ -33,6 +33,7 @@ const { buildReport } = require('./report.js');
 const { curate } = require('./curation.js');
 const ledger = require('./scoreledger.js');
 const providers = require('./providers.js');
+const autostart = require('./autostart.js');
 const { makeSource, MicSource, findLiveDevice, SR, FRAME } = require('./sources.js');
 
 // ---------------------------------------------------------------- 启动参数
@@ -973,17 +974,23 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, gen);
     }
     if (p === '/api/settings' && req.method === 'GET') {
-      return json(res, 200, providers.publicView());
+      return json(res, 200, { ...providers.publicView(), autostart: autostart.isEnabled() });
     }
     if (p === '/api/settings' && req.method === 'POST') {
       const body = JSON.parse((await readBody(req)) || '{}');
+      // 开机自启：不进 settings.json，直接写/删 HKCU\...\Run
+      let autostartResult = null;
+      if (Object.prototype.hasOwnProperty.call(body, 'autostart')) {
+        autostartResult = autostart.setEnabled(!!body.autostart);
+        delete body.autostart;
+      }
       // 界面回传打码的 key 时不要覆盖真实 key
       if (typeof body.openaiKey === 'string' && body.openaiKey.includes('****')) delete body.openaiKey;
       if (typeof body.deepseekKey === 'string' && body.deepseekKey.includes('****')) delete body.deepseekKey;
       providers.save(body);
       // 采集上限/开关改了要立刻生效（capture 只在 reload 时读设置）
       try { capture.reload(); rebuildSpotter(); setHandyPathFromSettings(); } catch { /* ignore */ }
-      return json(res, 200, { ok: true, settings: providers.publicView() });
+      return json(res, 200, { ok: true, settings: providers.publicView(), autostart: autostart.isEnabled(), autostartResult });
     }
     if (p === '/api/ollama/status') {
       return json(res, 200, await providers.ollamaStatus());

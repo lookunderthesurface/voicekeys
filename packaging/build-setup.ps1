@@ -8,9 +8,9 @@
 # 为什么自己写安装器：本机没有 Inno Setup / NSIS，而 .NET Framework 的 csc 是 Windows 自带，
 # 用户不需要装任何工具；按用户安装（%LOCALAPPDATA%\Programs\VoiceKeys），不需要管理员权限。
 #
-# 用法：powershell -ExecutionPolicy Bypass -File packaging/build-setup.ps1 [-Version 0.2.5]
+# 用法：powershell -ExecutionPolicy Bypass -File packaging/build-setup.ps1 [-Version 0.2.6]
 
-param([string]$Version = '0.2.5')
+param([string]$Version = '0.2.6')
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -51,7 +51,7 @@ if (Test-Path $nested) {
 
 Write-Host '== 3/8 编译启动器（必须在打包前） ==' -ForegroundColor Cyan
 $launcherExe = Join-Path $payloadDir 'VoiceKeys.exe'
-$out = & $csc /nologo /target:winexe /out:$launcherExe /optimize+ /win32icon:$icon /win32manifest:$manifest (Join-Path $root 'packaging\launcher.cs') 2>&1
+$out = & $csc /nologo /target:winexe /out:$launcherExe /optimize+ /win32icon:$icon /win32manifest:$manifest /r:System.Windows.Forms.dll /r:System.Drawing.dll (Join-Path $root 'packaging\launcher.cs') 2>&1
 if (-not (Test-Path $launcherExe)) {
   $out | ForEach-Object { Write-Host ('   ' + $_) -ForegroundColor Red }
   throw '启动器编译失败'

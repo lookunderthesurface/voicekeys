@@ -189,6 +189,14 @@
 
   <div class="col">
     <section class="panel">
+      <h2>运行方式</h2>
+      <label style="cursor:pointer;display:flex;align-items:center;gap:8px;margin:6px 0 4px">
+        <input type="checkbox" id="autoStartToggle"> <span>开机自启（登录 Windows 后自动在后台运行）</span>
+      </label>
+      <div class="hint">开启后在 <code>HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run</code> 登记一项，以 <code>--no-browser</code> 静默启动；关闭即删除。后台运行时右下角通知区有 VoiceKeys 托盘图标，双击打开控制台。</div>
+    </section>
+
+    <section class="panel">
       <h2>自校准（采集 → 老师复核）</h2>
       <div class="target">已采集 <b id="capCount">0</b> / <input id="capMaxInput" type="number" min="20" max="5000" step="50" style="width:64px" title="采集上限，改完回车生效"> · <label style="cursor:pointer"><input type="checkbox" id="capAutoClean" style="vertical-align:-2px"> 满了自动删废数据</label> · <button class="tiny" id="btnCleanCap" title="删除转写为空/无语音/文件缺失的废数据">清理废数据</button></div><div class="target" style="display:none">已采集 <b id="capCountDup">0</b> / <span id="capMax">100</span>　<span class="muted" id="capNote"></span></div>
       <div id="scoreLine" style="margin:6px 0;padding:6px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px"></div>
@@ -1054,6 +1062,24 @@ document.addEventListener('click', async (ev) => {
   }
 });
 setTimeout(loadCalib, 1200);
+// ---- 开机自启开关 ----
+async function loadAutoStart() {
+  try {
+    const s = await api('/api/settings');
+    const t = document.getElementById('autoStartToggle');
+    if (t) t.checked = !!s.autostart;
+  } catch { /* ignore */ }
+}
+document.addEventListener('change', async (ev) => {
+  if (!ev.target || ev.target.id !== 'autoStartToggle') return;
+  try {
+    const r = await api('/api/settings', { autostart: ev.target.checked });
+    ev.target.checked = !!r.autostart;
+    if (r.autostartResult && r.autostartResult.ok === false) alert('写入失败：' + (r.autostartResult.error || '未知错误'));
+  } catch (e) { alert('设置失败：' + e.message); loadAutoStart(); }
+});
+setTimeout(loadAutoStart, 900);
+
 setInterval(() => { if (document.getElementById('calibPanel')) loadCalib(); }, 5000);
 
 // ---- 首次运行：模型检测 ----
