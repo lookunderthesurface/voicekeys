@@ -224,6 +224,17 @@ const PRIMITIVES = [
     },
   },
 
+
+  {
+    id: 'dsh.focus',
+    kind: 'system',
+    desc: '把键盘焦点（光标）放进 DeepSeek Harness 的输入框：必要时把 DSH 窗口调到前台；不输入内容、不动已有草稿',
+    params: {},
+    reversible: false,
+    risk: 'safe',
+    toWorker: () => ({ op: 'dsh.focus' }),
+  },
+
   {
     id: 'dsh.send',
     kind: 'system',

@@ -202,6 +202,50 @@ function Send-Reply($obj) {
 # ---------------- dsh.send：发送 DeepSeek Harness 输入框里的草稿 ----------------
 # 不用 Enter：Enter 会把输入法正在组词/残留草稿直接发出去。这里用 UI Automation 直接点
 # 「发送」按钮：不抢焦点、不怕输入法；点前校验草稿非空、与上次不同、按钮不是「停止生成」。
+
+# ---------------- dsh.focus：把光标放进 DSH 输入框 ----------------
+# 只做两件事：把 DSH 窗口调到前台、把 UIA 焦点设到 composer。不输入内容、不抢已有草稿。
+function Focus-DshComposer() {
+    Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes -ErrorAction Stop
+
+    $procs = Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+    if (-not $procs) { return @{ ok = $false; error = '找不到 DeepSeek Harness 窗口（可能已关闭）' } }
+    $win = $procs | Where-Object { $_.MainWindowTitle } | Select-Object -First 1
+    if (-not $win) { $win = $procs | Select-Object -First 1 }
+
+    $null = [Win]::Activate([int64]$win.MainWindowHandle)
+    Start-Sleep -Milliseconds 250
+    $fg = [Win]::GetForegroundWindow().ToInt64()
+    if ($fg -ne [int64]$win.MainWindowHandle) {
+        $null = [Win]::Activate([int64]$win.MainWindowHandle)
+        Start-Sleep -Milliseconds 300
+        $fg = [Win]::GetForegroundWindow().ToInt64()
+    }
+
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($win.MainWindowHandle)
+    $cp = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'GRgSLq_input')
+    $edit = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cp)
+    if (-not $edit) {
+        $condType = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+        $edits = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condType)
+        foreach ($e in $edits) {
+            if ($e.Current.Name -match '发消息|发送消息|消息或任务|composer') { $edit = $e; break }
+        }
+    }
+    if (-not $edit) { return @{ ok = $false; error = '找不到 DSH 输入框（DSH 版本可能更新了）' } }
+
+    try { $edit.SetFocus() } catch { return @{ ok = $false; error = ('设置焦点失败: ' + $_.Exception.Message) } }
+    Start-Sleep -Milliseconds 150
+
+    $focusedOk = $false
+    try {
+        $fe = [System.Windows.Automation.AutomationElement]::FocusedElement
+        if ($fe) { $focusedOk = ($fe.Current.ClassName -eq $edit.Current.ClassName) }
+    } catch { }
+
+    return @{ ok = $true; focused = $focusedOk; foreground = ([int64]$fg -eq [int64]$win.MainWindowHandle); title = [string]$win.MainWindowTitle; note = '光标已放进 DSH 输入框' }
+}
+
 function Send-DshMessage([bool]$dedupe) {
     Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes -ErrorAction Stop
 
@@ -313,6 +357,10 @@ while ($true) {
             }
             'dsh.send' {
                 $r = Send-DshMessage ([bool]$cmd.dedupe)
+                Send-Reply $r
+            }
+            'dsh.focus' {
+                $r = Focus-DshComposer
                 Send-Reply $r
             }
             'window.find' {
