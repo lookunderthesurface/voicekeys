@@ -223,6 +223,17 @@ const PRIMITIVES = [
       return { ok: true, changed: true, recording: want, note: want ? '已开始 Handy 录音' : '已停止 Handy 录音' };
     },
   },
+
+  {
+    id: 'dsh.send',
+    kind: 'system',
+    desc: '发送 DeepSeek Harness 输入框里的草稿：UI Automation 直接点「发送」按钮（不抢焦点、不怕输入法）；草稿为空 / 与上次相同 / DSH 正在生成时拒绝',
+    params: { dedupe: { type: 'boolean', default: true } },
+    reversible: false,
+    risk: 'safe',
+    toWorker: (p) => ({ op: 'dsh.send', dedupe: p.dedupe !== false }),
+  },
+
   {
     id: 'flow.wait',
     kind: 'flow',

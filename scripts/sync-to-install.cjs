@@ -26,6 +26,15 @@ function copyDir(from, to, skip = []) {
   }
 }
 
+// runtime 只同步 worker.ps1（node.exe/其它运行时文件不覆盖）
+{
+  const srcWorker = path.join(ROOT, 'runtime', 'worker.ps1');
+  const dstWorker = path.join(INSTALL, 'runtime', 'worker.ps1');
+  if (fs.existsSync(srcWorker) && fs.existsSync(path.dirname(dstWorker))) {
+    fs.copyFileSync(srcWorker, dstWorker);
+    console.log('  worker.ps1 已同步');
+  }
+}
 for (const d of DIRS) {
   const from = path.join(DEV, d);
   if (!fs.existsSync(from)) continue;
