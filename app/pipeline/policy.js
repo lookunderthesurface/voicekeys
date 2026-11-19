@@ -15,7 +15,7 @@
 //      —— 防止把「播完了」这种噪声当成"停止"
 
 const DEFAULT_POLICY = {
-  candidateFloor: 0.15,        // 低于这个分：连候选都不提（"自信认为不是任何词"的下界）
+  candidateFloor: 0.5,        // 低于这个分：连候选都不提（"自信认为不是任何词"的下界）
   fastPathThreshold: 0.95,     // 最高分要达到这个才可能走快速通道
   fastPathMargin: 0.15,        // 且要领先第二名这么多，才算"自信"（用户 2026-11-16 定）
   dualAgreementBelow: 0.95,

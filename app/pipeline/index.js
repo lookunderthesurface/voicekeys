@@ -67,7 +67,13 @@ class Pipeline {
     const all = list.map((w) => ({ word: w.word, ...tailScore(text, w) }))
       .sort((a, b) => b.score - a.score);
     const best = all[0] || null;
-    const verdict = { propose: Boolean(best && best.score >= policy.DEFAULT_POLICY.candidateFloor), reason: 'tail-window' };
+    // 每词阈值也适用于 loose 路径：某个词自己设了更高的 m1 门槛时，用它自己的门槛。
+    // 没单设的词仍用全局 candidateFloor（0.15），避免收紧全局召回。
+    const bestMeta = best && wordMeta && wordMeta.get ? wordMeta.get(best.word) : null;
+    const bestFloor = bestMeta && typeof bestMeta.m1 === 'number'
+      ? bestMeta.m1
+      : policy.DEFAULT_POLICY.candidateFloor;
+    const verdict = { propose: Boolean(best && best.score >= bestFloor), reason: 'tail-window' };
     if (!verdict.propose) return null;   // M1 判"否" → 直接丢，不打扰 M2
 
     const mLoose = marginOf(text);
