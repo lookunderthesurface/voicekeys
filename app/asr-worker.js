@@ -20,23 +20,37 @@ const PLUGIN = process.env.VOICE_PLUGIN_DIR || PATHS.pluginRoot();
 const sherpa = require(path.join(PLUGIN, 'node_modules', 'sherpa-onnx-node'));
 
 const SR = 16000;
-const MODEL_DIR = process.env.VK_ASR_DIR || path.join(require('./config.js').DIRS.models, 'asr', 'sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23');
+const ASR_ROOT = path.join(require('./config.js').DIRS.models, 'asr');
+// 2026-11-20：换用 zipformer-large（multi_zh_hans，2025-06-30），旧的 14M 留作回滚
+const DEFAULT_MODEL_DIRS = [
+  'sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30',
+  'sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23',
+];
+function defaultModelDir() {
+  for (const name of DEFAULT_MODEL_DIRS) {
+    const p = path.join(ASR_ROOT, name);
+    try { if (fs.existsSync(p)) return p; } catch { /* ignore */ }
+  }
+  return path.join(ASR_ROOT, DEFAULT_MODEL_DIRS[0]);
+}
+const MODEL_DIR = process.env.VK_ASR_DIR || defaultModelDir();
 
 function emit(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
 }
 
 function pickModel(dir) {
-  const int8 = path.join(dir, 'encoder-epoch-99-avg-1.int8.onnx');
-  const useInt8 = fs.existsSync(int8);
-  const suffix = useInt8 ? '.int8.onnx' : '.onnx';
+  // 兼容两种文件命名：
+  //   新模型：encoder.int8.onnx / decoder.onnx / joiner.int8.onnx
+  //   旧模型：encoder-epoch-99-avg-1.int8.onnx / ...
+  const pick = (names) => names.map((n) => path.join(dir, n)).find((p) => fs.existsSync(p));
+  const encoder = pick(['encoder.int8.onnx', 'encoder.onnx', 'encoder-epoch-99-avg-1.int8.onnx', 'encoder-epoch-99-avg-1.onnx']);
+  const decoder = pick(['decoder.int8.onnx', 'decoder.onnx', 'decoder-epoch-99-avg-1.int8.onnx', 'decoder-epoch-99-avg-1.onnx']);
+  const joiner = pick(['joiner.int8.onnx', 'joiner.onnx', 'joiner-epoch-99-avg-1.int8.onnx', 'joiner-epoch-99-avg-1.onnx']);
+  if (!encoder || !decoder || !joiner) throw new Error('模型文件缺失: ' + dir);
   return {
-    useInt8,
-    transducer: {
-      encoder: path.join(dir, 'encoder-epoch-99-avg-1' + suffix),
-      decoder: path.join(dir, 'decoder-epoch-99-avg-1' + suffix),
-      joiner: path.join(dir, 'joiner-epoch-99-avg-1' + suffix),
-    },
+    useInt8: /\.int8\.onnx$/.test(encoder),
+    transducer: { encoder, decoder, joiner },
     tokens: path.join(dir, 'tokens.txt'),
   };
 }
@@ -71,7 +85,7 @@ function init() {
     rule3MinUtteranceLength: 20,
   });
   newStream();
-  emit({ type: 'ready', loadMs: Date.now() - t0, int8: picked.useInt8 });
+  emit({ type: 'ready', loadMs: Date.now() - t0, int8: picked.useInt8, model: path.basename(MODEL_DIR) });
 }
 
 function decodeAvailable() {

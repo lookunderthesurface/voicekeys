@@ -11,3 +11,6 @@ capture/
 models/
 .DS_Store
 dist/
+tmp-models/
+tmp-replay/
+tmp-onnx-env/

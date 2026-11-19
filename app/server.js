@@ -469,7 +469,7 @@ function handleAsrMessage(msg) {
   if (msg.type === 'ready') {
     asrReady = true;
     state.asrReady = true;
-    log(`ASR 就绪（加载 ${msg.loadMs}ms，${msg.int8 ? 'int8' : 'fp32'}）`);
+    log(`ASR 就绪（加载 ${msg.loadMs}ms，${msg.int8 ? 'int8' : 'fp32'}${msg.model ? '，' + msg.model : ''}）`);
     if (asrPrequeue.length) {
       log(`补灌启动期间攒下的 ${asrPrequeue.length} 帧`);
       const pending = asrPrequeue.splice(0, asrPrequeue.length);
@@ -504,6 +504,18 @@ const asrPrequeue = [];
 const VOICE_RMS = 0.02;             // 与 trigger 一致的"有音量"门限
 const VOICED_WINDOW_FRAMES = 50;    // 5 秒
 const VOICED_MIN_FRAMES = 3;        // 300ms
+
+// 一句话已经被消费（门到期、动作已定）后，清空 ASR 流：
+// 否则同一段识别文本会在后续静音门里被再次匹配 → 同一个命令执行两次
+// （用户 2026-11-19 实例：喊一次「播放视频」→ 播放后又被暂停，日志是 2.4 秒内两次触发）。
+function resetAsrText() {
+  try {
+    if (asrProc && asrProc.stdin && !asrProc.stdin.destroyed && asrProc.stdin.writable) {
+      asrProc.stdin.write(JSON.stringify({ type: 'reset' }) + '\n');
+    }
+  } catch { /* ignore */ }
+  state.asrText = '';
+}
 
 function evaluateOnSilence(voice) {
   state.frameIdx = (state.frameIdx || 0) + 1;
@@ -557,6 +569,7 @@ function evaluateOnSilence(voice) {
     state.pendingSilence = null;
     state.pendingConfirm = { word: p.word, candidate: p.cand, fast: true, audio: null, promise: null };
     log('门到期执行：' + p.word + '（自信）');
+    resetAsrText();
     void fireWord(p.word);
     return;
   }
@@ -565,6 +578,7 @@ function evaluateOnSilence(voice) {
   state.pendingSilence = null;
   state.pendingConfirm = { word: p.word, candidate: p.cand, fast: false, ...p.handle };
   log('门到期：' + p.word + '（交给 M2 裁决）');
+  resetAsrText();
   void fireWord(p.word);
 }
 
