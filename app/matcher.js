@@ -59,11 +59,23 @@ function splitSyllable(s) {
   return { initial: m[1] || '', final: m[2] || String(s) };
 }
 
+/** 声母"口音容错"家族：只有这些才配 0.85，其余同韵母不同声母只算 0.35 */
+function sameInitialFamily(x, y) {
+  if (!x || !y) return false;
+  const families = [['zh', 'z'], ['ch', 'c'], ['sh', 's'], ['n', 'l']];
+  return families.some(([a, b]) => (x === a && y === b) || (x === b && y === a));
+}
+
 /** 两个音节的部分相似度（0~1） */
 function syllableSim(a, b) {
   if (a === b) return 1;
   const A = splitSyllable(a); const B = splitSyllable(b);
-  if (A.final === B.final) return A.initial === B.initial ? 1 : 0.85;   // 韵母一样、声母不同（zh/z）
+  if (A.final === B.final) {
+    if (A.initial === B.initial) return 1;
+    // 2026-11-20：原来"同韵母一律 0.85"，导致「大龙」≈「发送」0.85 → 游戏解说误触发发送。
+    // 只有同声母家族（zh/z、ch/c、sh/s、n/l）才配 0.85，其余只给 0.35。
+    return sameInitialFamily(A.initial, B.initial) ? 0.85 : 0.35;
+  }
   if (A.initial === B.initial && A.initial) return 0.5;                    // 声母一样、韵母不同
   if (A.final && B.final && (A.final.endsWith(B.final) || B.final.endsWith(A.final))) return 0.35; // 韵母部分重叠 hao/o
   return 0;
