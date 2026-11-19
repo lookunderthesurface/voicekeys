@@ -227,11 +227,11 @@
       <div class="panel" id="modelBanner" style="display:none;border-color:#8a6d3b;background:#1d1a10">
         <div class="title">还没有语音模型 <span class="tag">首次运行</span></div>
         <div class="muted" style="margin:6px 0 10px">
-          识别需要两个模型文件（M1 流式约 24MB、M2 确认约 80MB）。<b>你本地已经有这些模型吗？</b>
+          识别需要两个模型文件（M1 流式约 160MB、M2 确认约 78MB）。<b>你本地已经有这些模型吗？</b>
         </div>
         <div class="row" style="gap:8px;flex-wrap:wrap">
           <button class="tiny" id="modelHaveLocal">我本地有，指定目录</button>
-          <button class="primary tiny" id="modelDownload">没有，帮我下载（约 155MB）</button>
+          <button class="primary tiny" id="modelDownload">没有，帮我下载（约 205MB）</button>
           <span class="muted" id="modelHint"></span>
         </div>
       </div>
@@ -1100,10 +1100,10 @@ document.addEventListener('click', async (ev) => {
     const r = await api('/api/models/download', {});
     if (r && r.error) alert(r.error);
     const hint = document.getElementById('modelHint');
-    if (hint) hint.textContent = '正在下载（约 155MB），下完重启应用即可';
+    if (hint) hint.textContent = '正在下载（约 205MB），下完重启应用即可';
   }
   if (ev.target && ev.target.id === 'modelHaveLocal') {
-    const dir = prompt('把模型所在目录贴进来（两种都行：\n· 含 sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23 与 sherpa-onnx-paraformer-zh-small-2024-03-09 的父目录\n· 或直接是正在跑的那一份 models/asr）');
+    const dir = prompt('把模型所在目录贴进来（两种都行：\n· 含 sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30 与 sherpa-onnx-paraformer-zh-small-2024-03-09 的父目录\n· 或直接是正在跑的那一份 models/asr）');
     if (!dir) return;
     const r = await api('/api/models/use-local', { dir });
     if (r && r.error) { alert(r.error); return; }

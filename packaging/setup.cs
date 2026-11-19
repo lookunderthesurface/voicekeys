@@ -145,7 +145,7 @@ class VoiceKeysSetup
             {
                 k.SetValue("DisplayName", AppName);
                 k.SetValue("DisplayIcon", exe);
-                k.SetValue("DisplayVersion", "0.2.6");
+                k.SetValue("DisplayVersion", "0.2.7");
                 k.SetValue("Publisher", "lookunderthesurface");
                 k.SetValue("InstallLocation", dir);
                 k.SetValue("UninstallString", "\"" + uninstaller + "\" --uninstall");

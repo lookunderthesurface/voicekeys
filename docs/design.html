@@ -138,7 +138,7 @@
 <table>
   <tr><th>组件</th><th>加载</th><th>常驻内存</th><th>CPU</th></tr>
   <tr><td>主进程（采集/触发/UI）</td><td>&lt;1s</td><td>65 MB</td><td>0.3–0.8% 单核</td></tr>
-  <tr><td>M1 流式 ASR（14M，绑小核）</td><td>0.9s</td><td>120 MB</td><td>3–4% 单核（RTF≈0.05）</td></tr>
+  <tr><td>M1 流式 ASR（zipformer-large，绑小核）</td><td>≈4.7s</td><td>≈291 MB</td><td>≈15% 单核（RTF≈0.15）</td></tr>
   <tr><td>M2 确认（80MB，8 线程）</td><td>0.85s</td><td>190 MB</td><td>空闲 0%，每次 43ms</td></tr>
   <tr><td>校准用 0.6B（按需）</td><td>1.4s</td><td>显存 735 MiB</td><td>仅复核时</td></tr>
 </table>

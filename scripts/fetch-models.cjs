@@ -3,7 +3,7 @@
 // 用法：node scripts/fetch-models.cjs
 //   · 默认下到 <用户数据目录>/models/asr/
 //   · 已经存在的跳过
-//   · 只下 M1（流式，24MB）与 M2（非流式，80MB）；老师模型 811MB 只在用校准时才需要
+//   · 只下 M1（流式 zipformer-large，约 127MB 压缩包）与 M2（非流式，约 74MB）；老师模型 ~2GB 只在用校准时才需要
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
@@ -11,10 +11,10 @@ const config = require('../app/config.js');
 
 const MODELS = [
   {
-    name: 'sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23',
-    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23.tar.bz2',
-    why: 'M1 流式识别（边听边出字）',
-    must: 'encoder-epoch-99-avg-1.int8.onnx',
+    name: 'sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30',
+    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2',
+    why: 'M1 流式识别（zipformer-large，边听边出字）',
+    must: 'encoder.int8.onnx',
   },
   {
     name: 'sherpa-onnx-paraformer-zh-small-2024-03-09',

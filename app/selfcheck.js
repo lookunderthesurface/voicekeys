@@ -38,7 +38,7 @@ function run(deps = {}) {
 
   // 3. 模型文件
   const asr = path.join(BASE, 'models', 'asr');
-  const m1 = path.join(asr, 'sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23', 'encoder-epoch-99-avg-1.int8.onnx');
+  const m1 = path.join(asr, 'sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30', 'encoder.int8.onnx');
   const m2 = path.join(asr, 'sherpa-onnx-paraformer-zh-small-2024-03-09', 'model.int8.onnx');
   add('M1 模型文件', exists(m1), m1);
   add('M2 模型文件', exists(m2), m2);

@@ -26,7 +26,7 @@ node app/server.js --port 19600 --open
 
 | 模型 | 用途 | 大小 | 获取方式 |
 |---|---|---|---|
-| `sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23` | 触发层识别 | 24 MB（int8） | 首次启动自动下载，或手动放到 `%LOCALAPPDATA%\dsh-voice\models\asr\` |
+| `sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30` | 触发层识别（zipformer-large） | ≈160 MB（int8） | 首次启动自动下载，或手动放到 `%LOCALAPPDATA%\VoiceKeys\models\asr\` |
 | `Qwen3-ASR-0.6B-Q8_0.gguf` | 校准时的"老师" | 811 MB | 第一次点「复核」时按需加载；若本机已装 Handy，会直接复用它的 HuggingFace 缓存 |
 
 模型**不随仓库分发**。离线环境请自行下载后放到上述目录，或用环境变量覆盖：

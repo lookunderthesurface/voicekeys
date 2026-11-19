@@ -14,7 +14,7 @@ Executor（常驻）    一直在听：M1 提候选 → 静音门 → M2 确认 
 ```
 麦克风 100ms/帧
    ├─→ 环形缓冲（最近 6 秒，供 M2 用，不随切句重置）
-   └─→ M1 流式 ASR（14M，24MB，3-4% CPU）→ 边说边出字
+   └─→ M1 流式 ASR（zipformer-large，≈160MB，RTF≈0.07-0.15）→ 边说边出字
           ↓
        pipeline.propose(text)
           │  端尾匹配成功 → 候选（score=匹配分，degraded 表示缺字）

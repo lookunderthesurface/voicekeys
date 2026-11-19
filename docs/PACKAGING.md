@@ -84,7 +84,7 @@ logs/app.log         日志
 
 1. **启动器**：小 exe 拉起 `node.exe app/server.js` 并打开 `http://127.0.0.1:19600/`；
    也可以不做启动器，README 里直接写地址。
-2. **首次运行下载模型**：M1 24MB + M2 80MB，下载到 `data/models/asr/`。
+2. **首次运行下载模型**：M1 ≈127MB（压缩包）+ M2 ≈74MB，下载到 `data/models/asr/`。
 3. **`lib/` 重建脚本**：`scripts/bootstrap-lib.cjs`（从 voice-plugin 或 npm 复制）。
 4. **安装器/签名**：可选（zip 或 Inno Setup）。
 

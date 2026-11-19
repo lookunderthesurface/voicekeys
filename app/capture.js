@@ -52,6 +52,39 @@ class Capture {
     } catch { /* 没有就算了 */ }
   }
 
+  /** 当前已知最大录音编号：index 行 + 磁盘上的 seg-NNNN.wav 都算（防止两处不同步时覆盖） */
+  maxKnownId() {
+    let maxId = 0;
+    try {
+      for (const e of this.list()) maxId = Math.max(maxId, Number(e.id) || 0);
+    } catch { /* ignore */ }
+    try {
+      for (const f of fs.readdirSync(this.dir)) {
+        const m = /^seg-(\d+)\.wav$/.exec(f);
+        if (m) maxId = Math.max(maxId, Number(m[1]));
+      }
+    } catch { /* ignore */ }
+    return maxId;
+  }
+
+  /** 分配编号并用独占方式写 wav：任何情况下都不会覆盖已有录音 */
+  writeNextWav(frames) {
+    let n = this.maxKnownId();
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      n += 1;
+      const id = String(n).padStart(4, '0');
+      const file = 'seg-' + id + '.wav';
+      try {
+        this.writeWav(path.join(this.dir, file), frames, { exclusive: true });
+        return { id, file };
+      } catch (e) {
+        if (e && e.code === 'EEXIST') continue;
+        throw e;
+      }
+    }
+    throw new Error('分配录音编号失败（连续 50 个都被占用）');
+  }
+
   list() {
     if (this.cache) return this.cache;
     try {
@@ -169,17 +202,15 @@ class Capture {
       if (Math.sqrt(ps / 1600) > 0.03) voiced += 1;
     }
 
-    // id 必须与"条数"脱钩：index 被清理后条数会变小，再用条数当 id 会覆盖旧录音。
-    const existing = this.list();
-    this.count = existing.length;
-    const maxId = existing.reduce((m, e) => Math.max(m, Number(e.id) || 0), 0);
-    const id = String(maxId + 1).padStart(4, '0');
-    const file = `seg-${id}.wav`;
+    // 编号与"条数"脱钩，且用独占写：即使 index 与磁盘不同步也不会覆盖旧录音。
+    this.count = this.list().length;
+    let allocated;
     try {
-      this.writeWav(path.join(this.dir, file), [pcm]);
+      allocated = this.writeNextWav([pcm]);
     } catch (e) {
       return { saved: false, why: 'write-failed' };
     }
+    const { id, file } = allocated;
 
     const entry = {
       id,
@@ -329,20 +360,18 @@ class Capture {
     }
     if (why === 'diagnostic') this.diagnosticCount = (this.diagnosticCount || 0) + 1;
 
-    const existing = this.list();
-    const maxId = existing.reduce((m, e) => Math.max(m, Number(e.id) || 0), 0);
-    const id = String(maxId + 1).padStart(4, '0');
-    const file = path.join(this.dir, `seg-${id}.wav`);
+    let allocated;
     try {
-      this.writeWav(file, seg.buffer);
+      allocated = this.writeNextWav(seg.buffer);
     } catch (e) {
       this.lastDropReason = '写文件失败: ' + e.message;
       return { saved: false, reason: 'write-failed' };
     }
+    const { id, file } = allocated;
 
     const entry = {
       id,
-      file: path.basename(file),
+      file,
       at: new Date().toISOString(),
       ms: seg.ms,
       voicedMs: seg.voicedMs,
@@ -361,7 +390,7 @@ class Capture {
     return { saved: true, entry };
   }
 
-  writeWav(file, frames) {
+  writeWav(file, frames, opts = {}) {
     const total = frames.reduce((n, f) => n + f.length, 0);
     const buf = Buffer.alloc(44 + total * 2);
     buf.write('RIFF', 0);
@@ -385,7 +414,7 @@ class Capture {
         off += 2;
       }
     }
-    fs.writeFileSync(file, buf);
+    fs.writeFileSync(file, buf, opts.exclusive ? { flag: 'wx' } : undefined);
   }
 
   startDiagnostic(minutes = 10) {
