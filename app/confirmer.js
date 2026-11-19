@@ -28,18 +28,24 @@ class Confirmer {
     if (this.proc) return;
     this.ready = false;
     this.buf = '';
-    this.proc = spawn(process.execPath, [path.join(__dirname, 'confirmer-worker.js')], {
+    const proc = spawn(process.execPath, [path.join(__dirname, 'confirmer-worker.js')], {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
-    this.proc.stdout.on('data', (c) => this.onData(c));
-    this.proc.stderr.on('data', (c) => {
+    this.proc = proc;
+    proc.stdout.on('data', (c) => this.onData(c));
+    proc.stderr.on('data', (c) => {
       const s = String(c).trim();
       if (s) this.log('确认模型 stderr: ' + s.slice(0, 160));
     });
-    this.proc.on('exit', () => {
-      this.proc = null;
-      this.ready = false;
+    proc.on('exit', () => {
+      // 只清理"当前进程"的状态：空闲卸载时旧进程可能晚几百毫秒才退出，
+      // 期间 preload 已经拉起了新进程；旧进程的 exit 不能把新进程的引用清掉，
+      // 否则下一次 preload 会再拉一个 → 多个 M2 常驻（2026-11-20 实测 2×188MB）。
+      if (this.proc === proc) {
+        this.proc = null;
+        this.ready = false;
+      }
       for (const [, p] of this.pending) p.resolve(null);
       this.pending.clear();
     });
